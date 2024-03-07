@@ -1,0 +1,15 @@
+[package]
+name = "memflow-registry"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+log = "0.4"
+tokio = { version = "1.36.0", features = ["macros", "rt-multi-thread"] }
+axum = "0.7"
+
+# parse plugins that are being uploaded
+goblin = "0.8"
+memflow = "0.2"
