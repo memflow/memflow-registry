@@ -40,11 +40,9 @@ impl Storage {
                             {
                                 let offset = export.offset.unwrap();
 
-                                // TODO: get rid of this unsafeness
-                                let descriptor_ptr: *const ConnectorDescriptor =
-                                    bytes.as_ptr().wrapping_add(offset) as *const _; // unsafe { std::mem::transmute::<_, ConnectorDescriptor>() };
-                                let descriptor =
-                                    unsafe { &*descriptor_ptr } as &ConnectorDescriptor;
+                                use memflow::dataview::DataView;
+                                let data_view = DataView::from(&bytes[..]);
+                                let descriptor = data_view.read::<ConnectorDescriptor>(offset);
 
                                 println!("plugin_version: {}", descriptor.plugin_version);
                                 println!(

@@ -12,4 +12,4 @@ axum = "0.7"
 
 # parse plugins that are being uploaded
 goblin = "0.8"
-memflow = "0.2"
+memflow = { version = "0.2", git = "https://github.com/memflow/memflow" }
