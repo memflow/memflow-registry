@@ -89,40 +89,12 @@ impl<'a> Descriptor<'a> {
 
     #[inline]
     pub fn version(&self) -> String {
-        let obj = Object::parse(self.bytes).unwrap();
-        let descriptors = self.descriptor(&obj);
-        let descriptor = descriptors.first().unwrap();
-        self.read_sliceref(&descriptor.version)
+        self.read_sliceref(&self.plugin_descriptor.version)
     }
 
     #[inline]
     pub fn description(&self) -> String {
-        let obj = Object::parse(self.bytes).unwrap();
-        let descriptors = self.descriptor(&obj);
-        let descriptor = descriptors.first().unwrap();
-        self.read_sliceref(&descriptor.description)
-    }
-
-    fn descriptor(&self, obj: &goblin::Object) -> Vec<ConnectorDescriptor> {
-        match obj {
-            Object::PE(pe) => {
-                for export in pe.exports.iter() {
-                    if let Some(name) = export.name {
-                        if name.starts_with("MEMFLOW_") {
-                            let offset = export.offset.unwrap();
-
-                            use memflow::dataview::DataView;
-                            let data_view = DataView::from(self.bytes);
-                            let descriptor = data_view.read::<ConnectorDescriptor>(offset);
-                            return vec![descriptor];
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-
-        vec![]
+        self.read_sliceref(&self.plugin_descriptor.description)
     }
 
     fn read_sliceref(&self, str: &CSliceRef<u8>) -> String {
