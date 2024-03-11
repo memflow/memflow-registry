@@ -1,16 +1,49 @@
-use std::{ffi::CStr, marker::PhantomData, path::Path};
+use goblin::{elf::section_header::SHN_XINDEX, pe::options::ParseOptions, Object};
+use memflow::{dataview::Pod, plugins::MEMFLOW_PLUGIN_VERSION};
 
-use axum::extract::ConnectInfo;
-use goblin::{
-    container::Ctx,
-    elf::{dynamic, section_header::SHN_XINDEX, Dynamic, Elf, ProgramHeader, RelocSection, Symtab},
-    mach::{exports::ExportInfo as MachExportInfo, Mach, MachO},
-    pe::{options::ParseOptions, PE},
-    strtab::Strtab,
-    Object,
-};
-use memflow::plugins::{ConnectorDescriptor, LoadableConnector, PluginDescriptor};
-use memflow::{cglue::CSliceRef, plugins::MEMFLOW_PLUGIN_VERSION};
+/// Adapted from PluginDescriptor<T: Loadable>
+#[repr(C, align(4))]
+pub struct PluginDescriptor32 {
+    pub plugin_version: i32,
+    pub accept_input: bool,
+    pub input_layout: u32,  // &'static TypeLayout
+    pub output_layout: u32, // &'static TypeLayout,
+    pub name: u32,          // CSliceRef<'static, u8>,
+    pub name_length: u32,
+    pub version: u32, // CSliceRef<'static, u8>,
+    pub version_length: u32,
+    pub description: u32, //CSliceRef<'static, u8>,
+    pub description_length: u32,
+    pub help_callback: u32, // Option<extern "C" fn(callback: HelpCallback) -> ()>,
+    pub target_list_callback: u32, // Option<extern "C" fn(callback: TargetCallback) -> i32>,
+    pub create: u32,        // CreateFn<T>,
+}
+const _: [(); std::mem::size_of::<PluginDescriptor32>()] = [(); 0x34];
+unsafe impl Pod for PluginDescriptor32 {}
+
+#[repr(C)]
+pub struct PluginDescriptor64 {
+    pub plugin_version: i32,
+    pub accept_input: bool,
+    pub input_layout: u64,  // &'static TypeLayout
+    pub output_layout: u64, // &'static TypeLayout,
+    pub name: u64,          // CSliceRef<'static, u8>,
+    pub name_length: u32,
+    pub version: u64, // CSliceRef<'static, u8>,
+    pub version_length: u32,
+    pub description: u64, //CSliceRef<'static, u8>,
+    pub description_length: u32,
+    pub help_callback: u64, // Option<extern "C" fn(callback: HelpCallback) -> ()>,
+    pub target_list_callback: u64, // Option<extern "C" fn(callback: TargetCallback) -> i32>,
+    pub create: u64,        // CreateFn<T>,
+}
+const _: [(); std::mem::size_of::<PluginDescriptor64>()] = [(); 0x60];
+unsafe impl Pod for PluginDescriptor64 {}
+
+pub enum PluginDescriptor {
+    Bits32(PluginDescriptor32),
+    Bits64(PluginDescriptor64),
+}
 
 /// Metadata attached to each file
 pub struct FileMetadata {
@@ -32,12 +65,12 @@ pub struct DescriptorFile<'a> {
 pub struct Descriptor<'a> {
     bytes: &'a [u8],
     object: &'a Object<'a>,
-    plugin_descriptor: ConnectorDescriptor,
+    plugin_descriptor: PluginDescriptor,
 }
 
 impl<'a> DescriptorFile<'a> {
     pub fn new(bytes: &'a [u8]) -> Self {
-        let object = Object::parse(&bytes[..]).unwrap();
+        let object = Object::parse(bytes).unwrap();
         Self { bytes, object }
     }
 
@@ -53,7 +86,16 @@ impl<'a> DescriptorFile<'a> {
 
                             use memflow::dataview::DataView;
                             let data_view = DataView::from(self.bytes);
-                            let descriptor = data_view.read::<ConnectorDescriptor>(offset);
+
+                            let descriptor = if pe.is_64 {
+                                PluginDescriptor::Bits64(
+                                    data_view.read::<PluginDescriptor64>(offset),
+                                )
+                            } else {
+                                PluginDescriptor::Bits32(
+                                    data_view.read::<PluginDescriptor32>(offset),
+                                )
+                            };
 
                             ret.push(Descriptor {
                                 bytes: self.bytes,
@@ -68,12 +110,6 @@ impl<'a> DescriptorFile<'a> {
                 if !elf.little_endian {
                     panic!("big_endian unsupported");
                 }
-                if !elf.is_64 {
-                    println!("--- NO 64 BIT SUPPORT YET ---");
-                    return vec![];
-                }
-
-                //                println!("header: {:?}", elf.program_headers);
 
                 let iter = elf
                     .dynsyms
@@ -83,6 +119,7 @@ impl<'a> DescriptorFile<'a> {
 
                 for (sym, name) in iter {
                     if name.starts_with("MEMFLOW_") {
+                        println!("sym: {:?}", sym);
                         let section = elf.section_headers.get(sym.st_shndx).unwrap();
                         if section.is_relocation() {
                             todo!()
@@ -103,8 +140,16 @@ impl<'a> DescriptorFile<'a> {
 
                         use memflow::dataview::DataView;
                         let data_view = DataView::from(self.bytes);
-                        let descriptor = data_view.read::<ConnectorDescriptor>(offset as usize);
-                        println!("descriptor.plugin_version: {}", descriptor.plugin_version);
+
+                        let descriptor = if elf.is_64 {
+                            PluginDescriptor::Bits64(
+                                data_view.read::<PluginDescriptor64>(offset as usize),
+                            )
+                        } else {
+                            PluginDescriptor::Bits32(
+                                data_view.read::<PluginDescriptor32>(offset as usize),
+                            )
+                        };
 
                         ret.push(Descriptor {
                             bytes: self.bytes,
@@ -124,12 +169,18 @@ impl<'a> DescriptorFile<'a> {
 impl<'a> Descriptor<'a> {
     #[inline]
     pub fn plugin_version(&self) -> i32 {
-        self.plugin_descriptor.plugin_version
+        match &self.plugin_descriptor {
+            PluginDescriptor::Bits32(descriptor) => descriptor.plugin_version,
+            PluginDescriptor::Bits64(descriptor) => descriptor.plugin_version,
+        }
     }
 
     #[inline]
     pub fn accept_input(&self) -> bool {
-        self.plugin_descriptor.accept_input
+        match &self.plugin_descriptor {
+            PluginDescriptor::Bits32(descriptor) => descriptor.accept_input,
+            PluginDescriptor::Bits64(descriptor) => descriptor.accept_input,
+        }
     }
 
     #[inline]
@@ -139,24 +190,48 @@ impl<'a> Descriptor<'a> {
 
     #[inline]
     pub fn name(&self) -> String {
-        self.read_sliceref(&self.plugin_descriptor.name)
+        match &self.plugin_descriptor {
+            PluginDescriptor::Bits32(descriptor) => {
+                self.read_sliceref(descriptor.name as u64, descriptor.name_length as usize)
+            }
+            PluginDescriptor::Bits64(descriptor) => {
+                self.read_sliceref(descriptor.name, descriptor.name_length as usize)
+            }
+        }
     }
 
     #[inline]
     pub fn version(&self) -> String {
-        self.read_sliceref(&self.plugin_descriptor.version)
+        match &self.plugin_descriptor {
+            PluginDescriptor::Bits32(descriptor) => self.read_sliceref(
+                descriptor.version as u64,
+                descriptor.version_length as usize,
+            ),
+            PluginDescriptor::Bits64(descriptor) => {
+                self.read_sliceref(descriptor.version, descriptor.version_length as usize)
+            }
+        }
     }
 
     #[inline]
     pub fn description(&self) -> String {
-        self.read_sliceref(&self.plugin_descriptor.description)
+        match &self.plugin_descriptor {
+            PluginDescriptor::Bits32(descriptor) => self.read_sliceref(
+                descriptor.description as u64,
+                descriptor.description_length as usize,
+            ),
+            PluginDescriptor::Bits64(descriptor) => self.read_sliceref(
+                descriptor.description,
+                descriptor.description_length as usize,
+            ),
+        }
     }
 
-    fn read_sliceref(&self, str: &CSliceRef<u8>) -> String {
+    fn read_sliceref(&self, ptr: u64, len: usize) -> String {
         match self.object {
             Object::PE(pe) => {
-                if !str.as_ptr().is_null() {
-                    let offset_va = str.as_ptr() as usize - pe.image_base;
+                if ptr != 0 {
+                    let offset_va = ptr as usize - pe.image_base;
                     let offset = goblin::pe::utils::find_offset(
                         offset_va,
                         &pe.sections,
@@ -165,8 +240,8 @@ impl<'a> Descriptor<'a> {
                     )
                     .unwrap();
 
-                    let mut buffer = vec![0u8; str.len()];
-                    buffer.copy_from_slice(&self.bytes[offset..offset + str.len()]);
+                    let mut buffer = vec![0u8; len];
+                    buffer.copy_from_slice(&self.bytes[offset..offset + len]);
 
                     std::str::from_utf8(&buffer[..]).unwrap().to_owned()
                 } else {
@@ -174,12 +249,12 @@ impl<'a> Descriptor<'a> {
                 }
             }
             Object::Elf(_) => {
-                if !str.as_ptr().is_null() {
+                if ptr != 0 {
                     // for elf no further mangling has to be done here
-                    let offset = str.as_ptr() as usize;
+                    let offset = ptr as usize;
 
-                    let mut buffer = vec![0u8; str.len()];
-                    buffer.copy_from_slice(&self.bytes[offset..offset + str.len()]);
+                    let mut buffer = vec![0u8; len];
+                    buffer.copy_from_slice(&self.bytes[offset..offset + len]);
 
                     std::str::from_utf8(&buffer[..]).unwrap().to_owned()
                 } else {
