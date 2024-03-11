@@ -3,7 +3,7 @@ use std::{ffi::CStr, marker::PhantomData, path::Path};
 use axum::extract::ConnectInfo;
 use goblin::{
     container::Ctx,
-    elf::{dynamic, Dynamic, Elf, ProgramHeader, RelocSection, Symtab},
+    elf::{dynamic, section_header::SHN_XINDEX, Dynamic, Elf, ProgramHeader, RelocSection, Symtab},
     mach::{exports::ExportInfo as MachExportInfo, Mach, MachO},
     pe::{options::ParseOptions, PE},
     strtab::Strtab,
@@ -64,7 +64,57 @@ impl<'a> DescriptorFile<'a> {
                     }
                 }
             }
-            _ => {}
+            Object::Elf(elf) => {
+                if !elf.little_endian {
+                    panic!("big_endian unsupported");
+                }
+                if !elf.is_64 {
+                    println!("--- NO 64 BIT SUPPORT YET ---");
+                    return vec![];
+                }
+
+                //                println!("header: {:?}", elf.program_headers);
+
+                let iter = elf
+                    .dynsyms
+                    .iter()
+                    .filter(|s| !s.is_import())
+                    .filter_map(|s| elf.dynstrtab.get_at(s.st_name).map(|n| (s, n)));
+
+                for (sym, name) in iter {
+                    if name.starts_with("MEMFLOW_") {
+                        let section = elf.section_headers.get(sym.st_shndx).unwrap();
+                        if section.is_relocation() {
+                            todo!()
+                        }
+
+                        if sym.st_shndx == SHN_XINDEX as usize {
+                            todo!()
+                        }
+
+                        // section
+                        let section = elf
+                            .program_headers
+                            .iter()
+                            .find(|h| h.vm_range().contains(&(sym.st_value as usize)))
+                            .unwrap();
+
+                        let offset = sym.st_value - section.p_align;
+
+                        use memflow::dataview::DataView;
+                        let data_view = DataView::from(self.bytes);
+                        let descriptor = data_view.read::<ConnectorDescriptor>(offset as usize);
+                        println!("descriptor.plugin_version: {}", descriptor.plugin_version);
+
+                        ret.push(Descriptor {
+                            bytes: self.bytes,
+                            object: &self.object,
+                            plugin_descriptor: descriptor,
+                        });
+                    }
+                }
+            }
+            _ => todo!(),
         }
 
         ret
@@ -75,6 +125,11 @@ impl<'a> Descriptor<'a> {
     #[inline]
     pub fn plugin_version(&self) -> i32 {
         self.plugin_descriptor.plugin_version
+    }
+
+    #[inline]
+    pub fn accept_input(&self) -> bool {
+        self.plugin_descriptor.accept_input
     }
 
     #[inline]
@@ -100,21 +155,38 @@ impl<'a> Descriptor<'a> {
     fn read_sliceref(&self, str: &CSliceRef<u8>) -> String {
         match self.object {
             Object::PE(pe) => {
-                let offset_va = str.as_ptr() as usize - pe.image_base;
-                let offset = goblin::pe::utils::find_offset(
-                    offset_va,
-                    &pe.sections,
-                    8,
-                    &ParseOptions::default(),
-                )
-                .unwrap();
+                if !str.as_ptr().is_null() {
+                    let offset_va = str.as_ptr() as usize - pe.image_base;
+                    let offset = goblin::pe::utils::find_offset(
+                        offset_va,
+                        &pe.sections,
+                        8,
+                        &ParseOptions::default(),
+                    )
+                    .unwrap();
 
-                let mut buffer = vec![0u8; str.len()];
-                buffer.copy_from_slice(&self.bytes[offset..offset + str.len()]);
+                    let mut buffer = vec![0u8; str.len()];
+                    buffer.copy_from_slice(&self.bytes[offset..offset + str.len()]);
 
-                std::str::from_utf8(&buffer[..]).unwrap().to_owned()
+                    std::str::from_utf8(&buffer[..]).unwrap().to_owned()
+                } else {
+                    String::new()
+                }
             }
-            _ => "".to_owned(),
+            Object::Elf(_) => {
+                if !str.as_ptr().is_null() {
+                    // for elf no further mangling has to be done here
+                    let offset = str.as_ptr() as usize;
+
+                    let mut buffer = vec![0u8; str.len()];
+                    buffer.copy_from_slice(&self.bytes[offset..offset + str.len()]);
+
+                    std::str::from_utf8(&buffer[..]).unwrap().to_owned()
+                } else {
+                    String::new()
+                }
+            }
+            _ => todo!(),
         }
     }
 }
@@ -124,11 +196,15 @@ impl Storage {
         // TODO: re-index all files
         let paths = std::fs::read_dir("./.storage").unwrap();
         for path in paths.filter_map(|p| p.ok()) {
+            println!("parsing file: {:?}", path.path());
+            // TODO: filter by filename
+            // TODO: filter by size
             let bytes = std::fs::read(path.path()).unwrap();
             let file = DescriptorFile::new(&bytes[..]);
             let descriptors = file.descriptors();
             for descriptor in descriptors.iter() {
                 println!("plugin_version: {}", descriptor.plugin_version());
+                println!("accept_input: {}", descriptor.accept_input());
                 println!("name: {}", descriptor.name());
                 println!("version: {}", descriptor.version());
                 println!("description: {}", descriptor.description());
