@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use goblin::{elf::section_header::SHN_XINDEX, pe::options::ParseOptions, Object};
 use memflow::{dataview::Pod, plugins::MEMFLOW_PLUGIN_VERSION};
 
@@ -74,96 +76,174 @@ impl<'a> DescriptorFile<'a> {
         Self { bytes, object }
     }
 
+    /// Parses and returns all descriptors found in the binary.
+    /// This function tries to guess the binary type.
     pub fn descriptors(&self) -> Vec<Descriptor> {
-        let mut ret = vec![];
         match &self.object {
-            Object::PE(pe) => {
-                for export in pe.exports.iter() {
-                    if let Some(name) = export.name {
-                        if name.starts_with("MEMFLOW_CONNECTOR_") || name.starts_with("MEMFLOW_OS_")
-                        {
-                            let offset = export.offset.unwrap();
-
-                            use memflow::dataview::DataView;
-                            let data_view = DataView::from(self.bytes);
-
-                            let descriptor = if pe.is_64 {
-                                PluginDescriptor::Bits64(
-                                    data_view.read::<PluginDescriptor64>(offset),
-                                )
-                            } else {
-                                PluginDescriptor::Bits32(
-                                    data_view.read::<PluginDescriptor32>(offset),
-                                )
-                            };
-
-                            ret.push(Descriptor {
-                                bytes: self.bytes,
-                                object: &self.object,
-                                plugin_descriptor: descriptor,
-                            });
-                        }
-                    }
-                }
-            }
-            Object::Elf(elf) => {
-                if !elf.little_endian {
-                    panic!("big_endian unsupported");
-                }
-
-                let iter = elf
-                    .dynsyms
-                    .iter()
-                    .filter(|s| !s.is_import())
-                    .filter_map(|s| elf.dynstrtab.get_at(s.st_name).map(|n| (s, n)));
-
-                for (sym, name) in iter {
-                    if name.starts_with("MEMFLOW_") {
-                        println!("sym: {:?}", sym);
-                        let section = elf.section_headers.get(sym.st_shndx).unwrap();
-                        if section.is_relocation() {
-                            todo!()
-                        }
-
-                        if sym.st_shndx == SHN_XINDEX as usize {
-                            todo!()
-                        }
-
-                        // section
-                        let section = elf
-                            .program_headers
-                            .iter()
-                            .find(|h| h.vm_range().contains(&(sym.st_value as usize)))
-                            .unwrap();
-
-                        // compute proper file offset based on section
-                        let offset = section.p_offset + sym.st_value - section.p_vaddr;
-
-                        use memflow::dataview::DataView;
-                        let data_view = DataView::from(self.bytes);
-
-                        let descriptor = if elf.is_64 {
-                            PluginDescriptor::Bits64(
-                                data_view.read::<PluginDescriptor64>(offset as usize),
-                            )
-                        } else {
-                            PluginDescriptor::Bits32(
-                                data_view.read::<PluginDescriptor32>(offset as usize),
-                            )
-                        };
-
-                        ret.push(Descriptor {
-                            bytes: self.bytes,
-                            object: &self.object,
-                            plugin_descriptor: descriptor,
-                        });
-                    }
-                }
-            }
+            Object::PE(pe) => self.descriptors_pe(pe),
+            Object::Elf(elf) => self.descriptors_elf(elf),
             _ => todo!(),
+        }
+    }
+
+    /// Parses the descriptors in a PE binary.
+    /// This function currently supports x86 and x86_64 binaries.
+    fn descriptors_pe(&self, pe: &goblin::pe::PE) -> Vec<Descriptor> {
+        let mut ret = vec![];
+
+        for export in pe.exports.iter() {
+            if let Some(name) = export.name {
+                if name.starts_with("MEMFLOW_CONNECTOR_") || name.starts_with("MEMFLOW_OS_") {
+                    let offset = export.offset.unwrap();
+
+                    use memflow::dataview::DataView;
+                    let data_view = DataView::from(self.bytes);
+
+                    let descriptor = if pe.is_64 {
+                        PluginDescriptor::Bits64(data_view.read::<PluginDescriptor64>(offset))
+                    } else {
+                        PluginDescriptor::Bits32(data_view.read::<PluginDescriptor32>(offset))
+                    };
+
+                    ret.push(Descriptor {
+                        bytes: self.bytes,
+                        object: &self.object,
+                        plugin_descriptor: descriptor,
+                    });
+                }
+            }
         }
 
         ret
+    }
+
+    /// Parses the descriptors in an ELF binary.
+    /// This function currently supports x86, x86_64, aarch64 and armv7.
+    fn descriptors_elf(&self, elf: &goblin::elf::Elf) -> Vec<Descriptor> {
+        let mut ret = vec![];
+
+        if !elf.little_endian {
+            panic!("big_endian unsupported");
+        }
+
+        let iter = elf
+            .dynsyms
+            .iter()
+            .filter(|s| !s.is_import())
+            .filter_map(|s| elf.dynstrtab.get_at(s.st_name).map(|n| (s, n)));
+
+        for (sym, name) in iter {
+            if name.starts_with("MEMFLOW_") {
+                let section = elf.section_headers.get(sym.st_shndx).unwrap();
+                if sym.st_shndx == SHN_XINDEX as usize {
+                    todo!()
+                }
+
+                // section
+                let section = elf
+                    .program_headers
+                    .iter()
+                    .find(|h| h.vm_range().contains(&(sym.st_value as usize)))
+                    .unwrap();
+
+                // compute proper file offset based on section
+                let offset = section.p_offset + sym.st_value - section.p_vaddr;
+
+                use memflow::dataview::DataView;
+                let data_view = DataView::from(self.bytes);
+
+                let descriptor = if elf.is_64 {
+                    let mut descriptor64 = data_view.read::<PluginDescriptor64>(offset as usize);
+                    self._elf_apply_relocs64(
+                        elf,
+                        sym.st_value..sym.st_value + sym.st_size,
+                        &mut descriptor64,
+                    );
+                    PluginDescriptor::Bits64(descriptor64)
+                } else {
+                    let mut descriptor32 = data_view.read::<PluginDescriptor32>(offset as usize);
+                    self._elf_apply_relocs32(
+                        elf,
+                        sym.st_value..sym.st_value + sym.st_size,
+                        &mut descriptor32,
+                    );
+                    PluginDescriptor::Bits32(descriptor32)
+                };
+
+                ret.push(Descriptor {
+                    bytes: self.bytes,
+                    object: &self.object,
+                    plugin_descriptor: descriptor,
+                });
+            }
+        }
+
+        ret
+    }
+
+    fn _elf_apply_relocs64<T: Pod>(
+        &self,
+        elf: &goblin::elf::Elf,
+        va_range: Range<u64>,
+        obj: &mut T,
+    ) {
+        for section_relocs in elf.shdr_relocs.iter() {
+            for reloc in section_relocs.1.iter() {
+                if reloc.r_offset >= va_range.start && reloc.r_offset < va_range.end {
+                    let field_offset = reloc.r_offset - va_range.start;
+
+                    use memflow::dataview::DataView;
+                    let data_view = DataView::from_mut(obj);
+                    let value = data_view.read::<u64>(field_offset as usize);
+
+                    // skip over entries that already contain the proper reference
+                    if value != 0 {
+                        continue;
+                    }
+
+                    // TODO: generalize this check
+                    if reloc.r_type != 8 && reloc.r_type != 23 && reloc.r_type != 1027 {
+                        todo!("only relative relocations are supported right now");
+                    }
+
+                    let value = value.wrapping_add_signed(reloc.r_addend.unwrap_or_default());
+                    data_view.write::<u64>(field_offset as usize, &value);
+                }
+            }
+        }
+    }
+
+    fn _elf_apply_relocs32<T: Pod>(
+        &self,
+        elf: &goblin::elf::Elf,
+        va_range: Range<u64>,
+        obj: &mut T,
+    ) {
+        for section_relocs in elf.shdr_relocs.iter() {
+            for reloc in section_relocs.1.iter() {
+                if reloc.r_offset >= va_range.start && reloc.r_offset < va_range.end {
+                    let field_offset = reloc.r_offset - va_range.start;
+
+                    use memflow::dataview::DataView;
+                    let data_view = DataView::from_mut(obj);
+                    let value = data_view.read::<u32>(field_offset as usize);
+
+                    // skip over entries that already contain the proper reference
+                    if value != 0 {
+                        continue;
+                    }
+
+                    // TODO: generalize this check
+                    if reloc.r_type != 8 && reloc.r_type != 23 && reloc.r_type != 1027 {
+                        todo!("only relative relocations are supported right now");
+                    }
+
+                    let value =
+                        value.wrapping_add_signed(reloc.r_addend.unwrap_or_default() as i32);
+                    data_view.write::<u32>(field_offset as usize, &value);
+                }
+            }
+        }
     }
 }
 
