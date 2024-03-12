@@ -136,7 +136,8 @@ impl<'a> DescriptorFile<'a> {
                             .find(|h| h.vm_range().contains(&(sym.st_value as usize)))
                             .unwrap();
 
-                        let offset = sym.st_value - section.p_align;
+                        // compute proper file offset based on section
+                        let offset = section.p_offset + sym.st_value - section.p_vaddr;
 
                         use memflow::dataview::DataView;
                         let data_view = DataView::from(self.bytes);
