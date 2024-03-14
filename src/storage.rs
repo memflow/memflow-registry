@@ -1,6 +1,11 @@
 use std::ops::Range;
 
-use goblin::{elf::section_header::SHN_XINDEX, pe::options::ParseOptions, Object};
+use goblin::{
+    elf::{section_header::SHN_XINDEX, Elf},
+    mach::{Mach, MachO, SingleArch},
+    pe::{self, options::ParseOptions, PE},
+    Object,
+};
 use memflow::{dataview::Pod, plugins::MEMFLOW_PLUGIN_VERSION};
 
 /// Adapted from PluginDescriptor<T: Loadable>
@@ -54,6 +59,7 @@ pub struct FileMetadata {
     pub tag: String,
     // TODO: memflow version / abi version
     // TODO: plugin version
+    // TODO: architecture, os, etc.
 }
 
 ///
@@ -82,18 +88,19 @@ impl<'a> DescriptorFile<'a> {
         match &self.object {
             Object::PE(pe) => self.descriptors_pe(pe),
             Object::Elf(elf) => self.descriptors_elf(elf),
+            Object::Mach(mach) => self.descriptors_mach(mach),
             _ => todo!(),
         }
     }
 
     /// Parses the descriptors in a PE binary.
     /// This function currently supports x86 and x86_64 binaries.
-    fn descriptors_pe(&self, pe: &goblin::pe::PE) -> Vec<Descriptor> {
+    fn descriptors_pe(&self, pe: &PE) -> Vec<Descriptor> {
         let mut ret = vec![];
 
         for export in pe.exports.iter() {
             if let Some(name) = export.name {
-                if name.starts_with("MEMFLOW_CONNECTOR_") || name.starts_with("MEMFLOW_OS_") {
+                if name.starts_with("MEMFLOW_") {
                     let offset = export.offset.unwrap();
 
                     use memflow::dataview::DataView;
@@ -119,7 +126,7 @@ impl<'a> DescriptorFile<'a> {
 
     /// Parses the descriptors in an ELF binary.
     /// This function currently supports x86, x86_64, aarch64 and armv7.
-    fn descriptors_elf(&self, elf: &goblin::elf::Elf) -> Vec<Descriptor> {
+    fn descriptors_elf(&self, elf: &Elf) -> Vec<Descriptor> {
         let mut ret = vec![];
 
         if !elf.little_endian {
@@ -134,7 +141,6 @@ impl<'a> DescriptorFile<'a> {
 
         for (sym, name) in iter {
             if name.starts_with("MEMFLOW_") {
-                let section = elf.section_headers.get(sym.st_shndx).unwrap();
                 if sym.st_shndx == SHN_XINDEX as usize {
                     todo!()
                 }
@@ -181,12 +187,7 @@ impl<'a> DescriptorFile<'a> {
         ret
     }
 
-    fn _elf_apply_relocs64<T: Pod>(
-        &self,
-        elf: &goblin::elf::Elf,
-        va_range: Range<u64>,
-        obj: &mut T,
-    ) {
+    fn _elf_apply_relocs64<T: Pod>(&self, elf: &Elf, va_range: Range<u64>, obj: &mut T) {
         for section_relocs in elf.shdr_relocs.iter() {
             for reloc in section_relocs.1.iter() {
                 if reloc.r_offset >= va_range.start && reloc.r_offset < va_range.end {
@@ -201,6 +202,7 @@ impl<'a> DescriptorFile<'a> {
                         continue;
                     }
 
+                    // https://chromium.googlesource.com/android_tools/+/8301b711a9ac7de56e9a9ff3dee0b2ebfc9a380f/ndk/sources/android/crazy_linker/src/crazy_linker_elf_relocations.cpp#36
                     // TODO: generalize this check
                     if reloc.r_type != 8 && reloc.r_type != 23 && reloc.r_type != 1027 {
                         todo!("only relative relocations are supported right now");
@@ -213,12 +215,7 @@ impl<'a> DescriptorFile<'a> {
         }
     }
 
-    fn _elf_apply_relocs32<T: Pod>(
-        &self,
-        elf: &goblin::elf::Elf,
-        va_range: Range<u64>,
-        obj: &mut T,
-    ) {
+    fn _elf_apply_relocs32<T: Pod>(&self, elf: &Elf, va_range: Range<u64>, obj: &mut T) {
         for section_relocs in elf.shdr_relocs.iter() {
             for reloc in section_relocs.1.iter() {
                 if reloc.r_offset >= va_range.start && reloc.r_offset < va_range.end {
@@ -233,6 +230,7 @@ impl<'a> DescriptorFile<'a> {
                         continue;
                     }
 
+                    // https://chromium.googlesource.com/android_tools/+/8301b711a9ac7de56e9a9ff3dee0b2ebfc9a380f/ndk/sources/android/crazy_linker/src/crazy_linker_elf_relocations.cpp#36
                     // TODO: generalize this check
                     if reloc.r_type != 8 && reloc.r_type != 23 && reloc.r_type != 1027 {
                         todo!("only relative relocations are supported right now");
@@ -244,6 +242,70 @@ impl<'a> DescriptorFile<'a> {
                 }
             }
         }
+    }
+
+    fn descriptors_mach(&self, mach: &Mach) -> Vec<Descriptor> {
+        let mut ret = vec![];
+
+        match mach {
+            Mach::Fat(multiarch) => {
+                // TODO: loop + recurse
+                for arch in multiarch.into_iter().filter_map(|a| a.ok()) {
+                    match arch {
+                        SingleArch::MachO(macho) => {
+                            let mut descriptors = self.descriptors_macho(&macho);
+                            ret.append(&mut descriptors);
+                        }
+                        SingleArch::Archive(_) => {
+                            panic!("mac archive not implemented");
+                        }
+                    }
+                }
+            }
+            Mach::Binary(macho) => {
+                let mut descriptors = self.descriptors_macho(macho);
+                ret.append(&mut descriptors);
+            }
+        }
+
+        ret
+    }
+
+    fn descriptors_macho(&self, macho: &MachO) -> Vec<Descriptor> {
+        let mut ret = vec![];
+
+        if !macho.little_endian {
+            panic!("no big endian support")
+        }
+
+        if let Ok(exports) = macho.exports() {
+            for export in exports.iter() {
+                if export.name.starts_with("_MEMFLOW_") {
+                    let offset = export.offset;
+
+                    use memflow::dataview::DataView;
+                    let data_view = DataView::from(self.bytes);
+
+                    let descriptor = if macho.is_64 {
+                        PluginDescriptor::Bits64(
+                            data_view.read::<PluginDescriptor64>(offset as usize),
+                        )
+                    } else {
+                        PluginDescriptor::Bits32(
+                            data_view.read::<PluginDescriptor32>(offset as usize),
+                        )
+                    };
+
+                    ret.push(Descriptor {
+                        bytes: self.bytes,
+                        object: &self.object,
+                        plugin_descriptor: descriptor,
+                    });
+                }
+            }
+        }
+
+        ret
     }
 }
 
@@ -313,10 +375,16 @@ impl<'a> Descriptor<'a> {
             Object::PE(pe) => {
                 if ptr != 0 {
                     let offset_va = ptr as usize - pe.image_base;
-                    let offset = goblin::pe::utils::find_offset(
+
+                    let file_alignment = pe
+                        .header
+                        .optional_header
+                        .map(|h| h.windows_fields.file_alignment)
+                        .unwrap_or(512);
+                    let offset = pe::utils::find_offset(
                         offset_va,
                         &pe.sections,
-                        8,
+                        file_alignment,
                         &ParseOptions::default(),
                     )
                     .unwrap();
@@ -333,6 +401,19 @@ impl<'a> Descriptor<'a> {
                 if ptr != 0 {
                     // for elf no further mangling has to be done here
                     let offset = ptr as usize;
+
+                    let mut buffer = vec![0u8; len];
+                    buffer.copy_from_slice(&self.bytes[offset..offset + len]);
+
+                    std::str::from_utf8(&buffer[..]).unwrap().to_owned()
+                } else {
+                    String::new()
+                }
+            }
+            Object::Mach(_) => {
+                if ptr != 0 {
+                    // TODO: why is this offset padded so high? is there a vm base somewhere?
+                    let offset = (ptr & 0xffff_ffff) as usize;
 
                     let mut buffer = vec![0u8; len];
                     buffer.copy_from_slice(&self.bytes[offset..offset + len]);
@@ -359,6 +440,9 @@ impl Storage {
             let file = DescriptorFile::new(&bytes[..]);
             let descriptors = file.descriptors();
             for descriptor in descriptors.iter() {
+                if descriptor.version().is_empty() {
+                    panic!();
+                }
                 println!("plugin_version: {}", descriptor.plugin_version());
                 println!("accept_input: {}", descriptor.accept_input());
                 println!("name: {}", descriptor.name());
