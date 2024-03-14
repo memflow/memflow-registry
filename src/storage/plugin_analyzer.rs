@@ -158,7 +158,11 @@ fn pe_read_sliceref(bytes: &[u8], pe: &PE, ptr: u64, len: usize) -> Result<Strin
         Error::Parse("could not find any section containing the referenced string".to_owned())
     })?;
 
-    // TODO: bounds check instead of panic
+    if offset + len > bytes.len() {
+        return Err(Error::Parse(
+            "referenced string is out of bounds".to_owned(),
+        ));
+    }
     let mut buffer = vec![0u8; len];
     buffer.copy_from_slice(&bytes[offset..offset + len]);
 
@@ -264,7 +268,11 @@ fn macho_read_sliceref(bytes: &[u8], ptr: u64, len: usize) -> Result<String> {
 
     // TODO: why is this offset padded so high? is there a vm base somewhere?
     let offset = (ptr & 0xffff_ffff) as usize;
-
+    if offset + len > bytes.len() {
+        return Err(Error::Parse(
+            "referenced string is out of bounds".to_owned(),
+        ));
+    }
     let mut buffer = vec![0u8; len];
     buffer.copy_from_slice(&bytes[offset..offset + len]);
 
@@ -411,7 +419,11 @@ fn elf_read_sliceref(bytes: &[u8], ptr: u64, len: usize) -> Result<String> {
 
     // for elf no further mangling has to be done here
     let offset = ptr as usize;
-
+    if offset + len > bytes.len() {
+        return Err(Error::Parse(
+            "referenced string is out of bounds".to_owned(),
+        ));
+    }
     let mut buffer = vec![0u8; len];
     buffer.copy_from_slice(&bytes[offset..offset + len]);
 
