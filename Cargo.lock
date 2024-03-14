@@ -768,6 +768,7 @@ dependencies = [
  "goblin",
  "log",
  "memflow",
+ "num-traits",
  "thiserror",
  "tokio",
 ]
@@ -813,6 +814,15 @@ name = "no-std-compat"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b93853da6d84c2e3c7d730d6473e8817692dd89be387eb01b94d7f108ecb5b8c"
+
+[[package]]
+name = "num-traits"
+version = "0.2.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da0df0e5185db44f69b44f26786fe401b6c293d1907744beaa7fa62b2e5a517a"
+dependencies = [
+ "autocfg",
+]
 
 [[package]]
 name = "num_cpus"

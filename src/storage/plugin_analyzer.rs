@@ -7,6 +7,7 @@ use goblin::{
     Object,
 };
 use memflow::dataview::Pod;
+use num_traits::{NumCast, WrappingAdd, WrappingSub, Zero};
 
 use crate::error::{Error, Result};
 
@@ -314,7 +315,11 @@ fn elf_parse_descriptors(bytes: &[u8], elf: &Elf) -> Result<Vec<PluginDescriptor
 
             if elf.is_64 {
                 let mut raw_desc = data_view.read::<PluginDescriptor64>(offset as usize);
-                elf_apply_relocs64(elf, sym.st_value..sym.st_value + sym.st_size, &mut raw_desc)?;
+                elf_apply_relocs::<u64, _>(
+                    elf,
+                    sym.st_value..sym.st_value + sym.st_size,
+                    &mut raw_desc,
+                )?;
                 #[rustfmt::skip]
                 ret.push(PluginDescriptor{
                     architecture: elf_architecture(elf),
@@ -325,7 +330,11 @@ fn elf_parse_descriptors(bytes: &[u8], elf: &Elf) -> Result<Vec<PluginDescriptor
                 });
             } else {
                 let mut raw_desc = data_view.read::<PluginDescriptor32>(offset as usize);
-                elf_apply_relocs32(elf, sym.st_value..sym.st_value + sym.st_size, &mut raw_desc)?;
+                elf_apply_relocs::<u32, _>(
+                    elf,
+                    sym.st_value..sym.st_value + sym.st_size,
+                    &mut raw_desc,
+                )?;
                 #[rustfmt::skip]
                 ret.push(PluginDescriptor{
                     architecture: elf_architecture(elf),
@@ -352,7 +361,11 @@ fn elf_architecture(elf: &Elf) -> PluginArchitecture {
     }
 }
 
-fn elf_apply_relocs64<T: Pod>(elf: &Elf, va_range: Range<u64>, obj: &mut T) -> Result<()> {
+fn elf_apply_relocs<N, T>(elf: &Elf, va_range: Range<u64>, obj: &mut T) -> Result<()>
+where
+    N: Pod + Eq + Zero + NumCast + WrappingAdd + WrappingSub,
+    T: Pod,
+{
     for section_relocs in elf.shdr_relocs.iter() {
         for reloc in section_relocs.1.iter() {
             if reloc.r_offset >= va_range.start && reloc.r_offset < va_range.end {
@@ -360,10 +373,10 @@ fn elf_apply_relocs64<T: Pod>(elf: &Elf, va_range: Range<u64>, obj: &mut T) -> R
 
                 use memflow::dataview::DataView;
                 let data_view = DataView::from_mut(obj);
-                let value = data_view.read::<u64>(field_offset as usize);
+                let value = data_view.read::<N>(field_offset as usize);
 
                 // skip over entries that already contain the proper reference
-                if value != 0 {
+                if value != N::zero() {
                     continue;
                 }
 
@@ -375,39 +388,14 @@ fn elf_apply_relocs64<T: Pod>(elf: &Elf, va_range: Range<u64>, obj: &mut T) -> R
                     ));
                 }
 
-                let value = value.wrapping_add_signed(reloc.r_addend.unwrap_or_default());
-                data_view.write::<u64>(field_offset as usize, &value);
-            }
-        }
-    }
-    Ok(())
-}
-
-fn elf_apply_relocs32<T: Pod>(elf: &Elf, va_range: Range<u64>, obj: &mut T) -> Result<()> {
-    for section_relocs in elf.shdr_relocs.iter() {
-        for reloc in section_relocs.1.iter() {
-            if reloc.r_offset >= va_range.start && reloc.r_offset < va_range.end {
-                let field_offset = reloc.r_offset - va_range.start;
-
-                use memflow::dataview::DataView;
-                let data_view = DataView::from_mut(obj);
-                let value = data_view.read::<u32>(field_offset as usize);
-
-                // skip over entries that already contain the proper reference
-                if value != 0 {
-                    continue;
-                }
-
-                // https://chromium.googlesource.com/android_tools/+/8301b711a9ac7de56e9a9ff3dee0b2ebfc9a380f/ndk/sources/android/crazy_linker/src/crazy_linker_elf_relocations.cpp#36
-                // TODO: generalize this check
-                if reloc.r_type != 8 && reloc.r_type != 23 && reloc.r_type != 1027 {
-                    return Err(Error::Parse(
-                        "only relative relocations are supported right now".to_owned(),
-                    ));
-                }
-
-                let value = value.wrapping_add_signed(reloc.r_addend.unwrap_or_default() as i32);
-                data_view.write::<u32>(field_offset as usize, &value);
+                // simulate a `wrapping_add_signed`
+                let addend = reloc.r_addend.unwrap_or_default();
+                let value = if addend > 0 {
+                    value.wrapping_add(&(num_traits::cast(addend).unwrap()))
+                } else {
+                    value.wrapping_sub(&(num_traits::cast(-addend).unwrap()))
+                };
+                data_view.write::<N>(field_offset as usize, &value);
             }
         }
     }
