@@ -768,6 +768,7 @@ dependencies = [
  "goblin",
  "log",
  "memflow",
+ "thiserror",
  "tokio",
 ]
 

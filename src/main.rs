@@ -1,5 +1,6 @@
 use axum::{routing::get, Router};
 
+mod error;
 mod storage;
 
 #[tokio::main]
