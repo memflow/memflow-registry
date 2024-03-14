@@ -97,23 +97,23 @@ fn pe_parse_descriptors(bytes: &[u8], pe: &PE) -> Result<Vec<PluginDescriptor>> 
                     if pe.is_64 {
                         let raw_desc = data_view.read::<PluginDescriptor64>(offset);
                         #[rustfmt::skip]
-                    ret.push(PluginDescriptor {
-                        architecture: pe_architecture(pe),
-                        plugin_version: raw_desc.plugin_version,
-                        name: pe_read_sliceref(bytes, pe, raw_desc.name, raw_desc.name_length as usize)?,
-                        version: pe_read_sliceref(bytes, pe, raw_desc.version, raw_desc.version_length as usize)?,
-                        description: pe_read_sliceref(bytes, pe, raw_desc.description, raw_desc.description_length as usize)?,
-                    });
+                        ret.push(PluginDescriptor {
+                            architecture: pe_architecture(pe),
+                            plugin_version: raw_desc.plugin_version,
+                            name: pe_read_sliceref(bytes, pe, raw_desc.name, raw_desc.name_length as usize)?,
+                            version: pe_read_sliceref(bytes, pe, raw_desc.version, raw_desc.version_length as usize)?,
+                            description: pe_read_sliceref(bytes, pe, raw_desc.description, raw_desc.description_length as usize)?,
+                        });
                     } else {
                         let raw_desc = data_view.read::<PluginDescriptor32>(offset);
                         #[rustfmt::skip]
-                    ret.push(PluginDescriptor {
-                        architecture: pe_architecture(pe),
-                        plugin_version: raw_desc.plugin_version,
-                        name: pe_read_sliceref(bytes, pe, raw_desc.name as u64, raw_desc.name_length as usize)?,
-                        version: pe_read_sliceref(bytes, pe, raw_desc.version as u64, raw_desc.version_length as usize)?,
-                        description: pe_read_sliceref(bytes, pe, raw_desc.description as u64, raw_desc.description_length as usize)?,
-                    });
+                        ret.push(PluginDescriptor {
+                            architecture: pe_architecture(pe),
+                            plugin_version: raw_desc.plugin_version,
+                            name: pe_read_sliceref(bytes, pe, raw_desc.name as u64, raw_desc.name_length as usize)?,
+                            version: pe_read_sliceref(bytes, pe, raw_desc.version as u64, raw_desc.version_length as usize)?,
+                            description: pe_read_sliceref(bytes, pe, raw_desc.description as u64, raw_desc.description_length as usize)?,
+                        });
                     }
                 }
             }
