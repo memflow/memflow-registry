@@ -312,7 +312,7 @@ impl<'a> DescriptorFile<'a> {
 
 #[derive(Debug)]
 pub enum CpuArchitecture {
-    Unknown,
+    Unknown(u32),
     X86,
     X86_64,
     Arm,
@@ -330,7 +330,7 @@ impl<'a> Descriptor<'a> {
                     0x8664 => CpuArchitecture::X86_64,
                     0x1c0 | 0x1c4 => CpuArchitecture::Arm,
                     0xAA64 => CpuArchitecture::Arm64,
-                    _ => CpuArchitecture::Unknown,
+                    _ => CpuArchitecture::Unknown(pe.header.coff_header.machine as u32),
                 }
             }
             Object::Elf(elf) => {
@@ -340,7 +340,7 @@ impl<'a> Descriptor<'a> {
                     62 => CpuArchitecture::X86_64,
                     40 => CpuArchitecture::Arm,
                     183 => CpuArchitecture::Arm64,
-                    _ => CpuArchitecture::Unknown,
+                    _ => CpuArchitecture::Unknown(elf.header.e_machine as u32),
                 }
             }
             Object::Mach(Mach::Binary(macho)) => {
@@ -351,7 +351,7 @@ impl<'a> Descriptor<'a> {
                     16777223 => CpuArchitecture::X86_64,
                     12 => CpuArchitecture::Arm,
                     16777228 => CpuArchitecture::Arm64,
-                    _ => CpuArchitecture::Unknown,
+                    _ => CpuArchitecture::Unknown(macho.header.cputype),
                 }
             }
             _ => unimplemented!(),
@@ -498,6 +498,7 @@ impl Storage {
                 println!("version: {}", descriptor.version());
                 println!("description: {}", descriptor.description());
             }
+            println!("")
         }
 
         Self {}
