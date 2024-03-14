@@ -62,8 +62,16 @@ pub enum PluginArchitecture {
 }
 
 #[derive(Debug)]
+pub enum PluginFileType {
+    Pe,
+    Elf,
+    Mach,
+}
+
+#[derive(Debug)]
 pub struct PluginDescriptor {
     pub architecture: PluginArchitecture,
+    pub file_type: PluginFileType,
     pub plugin_version: i32,
     pub name: String,
     pub version: String,
@@ -99,6 +107,7 @@ fn pe_parse_descriptors(bytes: &[u8], pe: &PE) -> Result<Vec<PluginDescriptor>> 
                         #[rustfmt::skip]
                         ret.push(PluginDescriptor {
                             architecture: pe_architecture(pe),
+                            file_type: PluginFileType::Pe,
                             plugin_version: raw_desc.plugin_version,
                             name: pe_read_sliceref(bytes, pe, raw_desc.name, raw_desc.name_length as usize)?,
                             version: pe_read_sliceref(bytes, pe, raw_desc.version, raw_desc.version_length as usize)?,
@@ -109,6 +118,7 @@ fn pe_parse_descriptors(bytes: &[u8], pe: &PE) -> Result<Vec<PluginDescriptor>> 
                         #[rustfmt::skip]
                         ret.push(PluginDescriptor {
                             architecture: pe_architecture(pe),
+                            file_type: PluginFileType::Pe,
                             plugin_version: raw_desc.plugin_version,
                             name: pe_read_sliceref(bytes, pe, raw_desc.name as u64, raw_desc.name_length as usize)?,
                             version: pe_read_sliceref(bytes, pe, raw_desc.version as u64, raw_desc.version_length as usize)?,
@@ -225,6 +235,7 @@ fn macho_parse_descriptors(bytes: &[u8], macho: &MachO) -> Result<Vec<PluginDesc
                     #[rustfmt::skip]
                     ret.push(PluginDescriptor{
                         architecture: macho_architecture(macho),
+                        file_type: PluginFileType::Mach,
                         plugin_version: raw_desc.plugin_version,
                         name: macho_read_sliceref(bytes, raw_desc.name, raw_desc.name_length as usize)?,
                         version: macho_read_sliceref(bytes, raw_desc.version, raw_desc.version_length as usize)?,
@@ -235,6 +246,7 @@ fn macho_parse_descriptors(bytes: &[u8], macho: &MachO) -> Result<Vec<PluginDesc
                     #[rustfmt::skip]
                     ret.push(PluginDescriptor{
                         architecture: macho_architecture(macho),
+                        file_type: PluginFileType::Mach,
                         plugin_version: raw_desc.plugin_version,
                         name: macho_read_sliceref(bytes, raw_desc.name as u64, raw_desc.name_length as usize)?,
                         version: macho_read_sliceref(bytes, raw_desc.version as u64, raw_desc.version_length as usize)?,
@@ -331,6 +343,7 @@ fn elf_parse_descriptors(bytes: &[u8], elf: &Elf) -> Result<Vec<PluginDescriptor
                 #[rustfmt::skip]
                 ret.push(PluginDescriptor{
                     architecture: elf_architecture(elf),
+                    file_type: PluginFileType::Elf,
                     plugin_version: raw_desc.plugin_version,
                     name: elf_read_sliceref(bytes, raw_desc.name, raw_desc.name_length as usize)?,
                     version: elf_read_sliceref(bytes, raw_desc.version, raw_desc.version_length as usize)?,
@@ -346,6 +359,7 @@ fn elf_parse_descriptors(bytes: &[u8], elf: &Elf) -> Result<Vec<PluginDescriptor
                 #[rustfmt::skip]
                 ret.push(PluginDescriptor{
                     architecture: elf_architecture(elf),
+                    file_type: PluginFileType::Elf,
                     plugin_version: raw_desc.plugin_version,
                     name: elf_read_sliceref(bytes, raw_desc.name as u64, raw_desc.name_length as usize)?,
                     version: elf_read_sliceref(bytes, raw_desc.version as u64, raw_desc.version_length as usize)?,
