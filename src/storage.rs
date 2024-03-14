@@ -296,6 +296,7 @@ impl<'a> DescriptorFile<'a> {
                         )
                     };
 
+                    // TODO: handle multiarch properly here
                     ret.push(Descriptor {
                         bytes: self.bytes,
                         object: &self.object,
@@ -309,7 +310,54 @@ impl<'a> DescriptorFile<'a> {
     }
 }
 
+#[derive(Debug)]
+pub enum CpuArchitecture {
+    Unknown,
+    X86,
+    X86_64,
+    Arm,
+    Arm64,
+}
+
 impl<'a> Descriptor<'a> {
+    #[inline]
+    pub fn architecture(&self) -> CpuArchitecture {
+        match self.object {
+            Object::PE(pe) => {
+                // https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#machine-types
+                match pe.header.coff_header.machine {
+                    0x14c => CpuArchitecture::X86,
+                    0x8664 => CpuArchitecture::X86_64,
+                    0x1c0 | 0x1c4 => CpuArchitecture::Arm,
+                    0xAA64 => CpuArchitecture::Arm64,
+                    _ => CpuArchitecture::Unknown,
+                }
+            }
+            Object::Elf(elf) => {
+                // https://refspecs.linuxfoundation.org/elf/gabi4+/ch4.eheader.html
+                match elf.header.e_machine {
+                    3 => CpuArchitecture::X86,
+                    62 => CpuArchitecture::X86_64,
+                    40 => CpuArchitecture::Arm,
+                    183 => CpuArchitecture::Arm64,
+                    _ => CpuArchitecture::Unknown,
+                }
+            }
+            Object::Mach(Mach::Binary(macho)) => {
+                // TODO: handle multiarch?
+                // https://crystal-lang.org/api/0.24.0/Debug/MachO/CpuType.html
+                match macho.header.cputype {
+                    7 => CpuArchitecture::X86,
+                    16777223 => CpuArchitecture::X86_64,
+                    12 => CpuArchitecture::Arm,
+                    16777228 => CpuArchitecture::Arm64,
+                    _ => CpuArchitecture::Unknown,
+                }
+            }
+            _ => unimplemented!(),
+        }
+    }
+
     #[inline]
     pub fn plugin_version(&self) -> i32 {
         match &self.plugin_descriptor {
@@ -443,6 +491,7 @@ impl Storage {
                 if descriptor.version().is_empty() {
                     panic!();
                 }
+                println!("architecture: {:?}", descriptor.architecture());
                 println!("plugin_version: {}", descriptor.plugin_version());
                 println!("accept_input: {}", descriptor.accept_input());
                 println!("name: {}", descriptor.name());
