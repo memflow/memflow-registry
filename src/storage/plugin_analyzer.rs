@@ -1,19 +1,21 @@
 use std::ops::Range;
 
+use constcat::concat;
+use dataview::{DataView, Pod};
 use goblin::{
     elf::{section_header::SHN_XINDEX, Elf},
     mach::{Mach, MachO, SingleArch},
     pe::{self, options::ParseOptions, PE},
     Object,
 };
-use memflow::dataview::Pod;
 use num_traits::{NumCast, WrappingAdd, WrappingSub, Zero};
 
 use crate::error::{Error, Result};
 
-static MEMFLOW_EXPORT_PREFIX: &str = "MEMFLOW_";
+const MEMFLOW_EXPORT_PREFIX: &str = "MEMFLOW_";
 
-/// Adapted from PluginDescriptor<T: Loadable>
+/// The PluginDescriptor struct is adapted and translated from memflow version 0.2.x:
+/// https://github.com/memflow/memflow/blob/0.2.0/memflow/src/plugins/mod.rs#L105
 #[repr(C, align(4))]
 struct PluginDescriptor32 {
     pub plugin_version: i32,
@@ -99,7 +101,6 @@ fn pe_parse_descriptors(bytes: &[u8], pe: &PE) -> Result<Vec<PluginDescriptor>> 
         if let Some(name) = export.name {
             if name.starts_with(MEMFLOW_EXPORT_PREFIX) {
                 if let Some(offset) = export.offset {
-                    use memflow::dataview::DataView;
                     let data_view = DataView::from(bytes);
 
                     if pe.is_64 {
@@ -223,11 +224,9 @@ fn macho_parse_descriptors(bytes: &[u8], macho: &MachO) -> Result<Vec<PluginDesc
 
     if let Ok(exports) = macho.exports() {
         for export in exports.iter() {
-            // TODO: append at compile time MEMFLOW_EXPORT_PREFIX
-            if export.name.starts_with("_MEMFLOW_") {
+            if export.name.starts_with(concat!("_", MEMFLOW_EXPORT_PREFIX)) {
                 let offset = export.offset;
 
-                use memflow::dataview::DataView;
                 let data_view = DataView::from(bytes);
 
                 if macho.is_64 {
@@ -330,7 +329,6 @@ fn elf_parse_descriptors(bytes: &[u8], elf: &Elf) -> Result<Vec<PluginDescriptor
             // compute proper file offset based on section
             let offset = section.p_offset + sym.st_value - section.p_vaddr;
 
-            use memflow::dataview::DataView;
             let data_view = DataView::from(bytes);
 
             if elf.is_64 {
@@ -393,7 +391,6 @@ where
             if reloc.r_offset >= va_range.start && reloc.r_offset < va_range.end {
                 let field_offset = reloc.r_offset - va_range.start;
 
-                use memflow::dataview::DataView;
                 let data_view = DataView::from_mut(obj);
                 let value = data_view.read::<N>(field_offset as usize);
 
