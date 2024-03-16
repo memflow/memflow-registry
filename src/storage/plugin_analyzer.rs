@@ -110,9 +110,9 @@ fn pe_parse_descriptors(bytes: &[u8], pe: &PE) -> Result<Vec<PluginDescriptor>> 
                             architecture: pe_architecture(pe),
                             file_type: PluginFileType::Pe,
                             plugin_version: raw_desc.plugin_version,
-                            name: pe_read_sliceref(bytes, pe, raw_desc.name, raw_desc.name_length as usize)?,
-                            version: pe_read_sliceref(bytes, pe, raw_desc.version, raw_desc.version_length as usize)?,
-                            description: pe_read_sliceref(bytes, pe, raw_desc.description, raw_desc.description_length as usize)?,
+                            name: read_string(bytes, pe_va_to_offset(pe, raw_desc.name), raw_desc.name_length as usize)?,
+                            version: read_string(bytes, pe_va_to_offset(pe, raw_desc.version), raw_desc.version_length as usize)?,
+                            description: read_string(bytes, pe_va_to_offset(pe, raw_desc.description), raw_desc.description_length as usize)?,
                         });
                     } else {
                         let raw_desc = data_view.read::<PluginDescriptor32>(offset);
@@ -121,9 +121,9 @@ fn pe_parse_descriptors(bytes: &[u8], pe: &PE) -> Result<Vec<PluginDescriptor>> 
                             architecture: pe_architecture(pe),
                             file_type: PluginFileType::Pe,
                             plugin_version: raw_desc.plugin_version,
-                            name: pe_read_sliceref(bytes, pe, raw_desc.name as u64, raw_desc.name_length as usize)?,
-                            version: pe_read_sliceref(bytes, pe, raw_desc.version as u64, raw_desc.version_length as usize)?,
-                            description: pe_read_sliceref(bytes, pe, raw_desc.description as u64, raw_desc.description_length as usize)?,
+                            name: read_string(bytes, pe_va_to_offset(pe, raw_desc.name as u64), raw_desc.name_length as usize)?,
+                            version: read_string(bytes, pe_va_to_offset(pe, raw_desc.version as u64), raw_desc.version_length as usize)?,
+                            description: read_string(bytes, pe_va_to_offset(pe, raw_desc.description as u64), raw_desc.description_length as usize)?,
                         });
                     }
                 }
@@ -145,33 +145,32 @@ fn pe_architecture(pe: &PE) -> PluginArchitecture {
     }
 }
 
-fn pe_read_sliceref(bytes: &[u8], pe: &PE, ptr: u64, len: usize) -> Result<String> {
-    if ptr == 0 {
-        return Err(Error::Parse(
-            "unable to read referenced string in binary".to_owned(),
-        ));
-    }
-
-    let offset_va = ptr as usize - pe.image_base;
-
+fn pe_va_to_offset(pe: &PE, va: u64) -> usize {
+    let offset_va = va as usize - pe.image_base;
     let file_alignment = pe
         .header
         .optional_header
         .map(|h| h.windows_fields.file_alignment)
         .unwrap_or(512);
-    let offset = pe::utils::find_offset(
+    pe::utils::find_offset(
         offset_va,
         &pe.sections,
         file_alignment,
         &ParseOptions::default(),
     )
-    .ok_or_else(|| {
-        Error::Parse("could not find any section containing the referenced string".to_owned())
-    })?;
+    .unwrap_or(0)
+}
+
+fn read_string(bytes: &[u8], offset: usize, len: usize) -> Result<String> {
+    if offset == 0 {
+        return Err(Error::Parse(
+            "unable to read referenced string in binary".to_owned(),
+        ));
+    }
 
     if offset + len > bytes.len() {
         return Err(Error::Parse(
-            "referenced string is out of bounds".to_owned(),
+            "referenced string is outside of the file".to_owned(),
         ));
     }
     let mut buffer = vec![0u8; len];
@@ -236,9 +235,9 @@ fn macho_parse_descriptors(bytes: &[u8], macho: &MachO) -> Result<Vec<PluginDesc
                         architecture: macho_architecture(macho),
                         file_type: PluginFileType::Mach,
                         plugin_version: raw_desc.plugin_version,
-                        name: macho_read_sliceref(bytes, raw_desc.name, raw_desc.name_length as usize)?,
-                        version: macho_read_sliceref(bytes, raw_desc.version, raw_desc.version_length as usize)?,
-                        description: macho_read_sliceref(bytes, raw_desc.description, raw_desc.description_length as usize)?,
+                        name: read_string(bytes, macho_va_to_offset(raw_desc.name), raw_desc.name_length as usize)?,
+                        version: read_string(bytes, macho_va_to_offset(raw_desc.version), raw_desc.version_length as usize)?,
+                        description: read_string(bytes, macho_va_to_offset(raw_desc.description), raw_desc.description_length as usize)?,
                     });
                 } else {
                     let raw_desc = data_view.read::<PluginDescriptor32>(offset as usize);
@@ -247,9 +246,9 @@ fn macho_parse_descriptors(bytes: &[u8], macho: &MachO) -> Result<Vec<PluginDesc
                         architecture: macho_architecture(macho),
                         file_type: PluginFileType::Mach,
                         plugin_version: raw_desc.plugin_version,
-                        name: macho_read_sliceref(bytes, raw_desc.name as u64, raw_desc.name_length as usize)?,
-                        version: macho_read_sliceref(bytes, raw_desc.version as u64, raw_desc.version_length as usize)?,
-                        description: macho_read_sliceref(bytes, raw_desc.description as u64, raw_desc.description_length as usize)?,
+                        name: read_string(bytes, macho_va_to_offset(raw_desc.name as u64), raw_desc.name_length as usize)?,
+                        version: read_string(bytes, macho_va_to_offset(raw_desc.version as u64), raw_desc.version_length as usize)?,
+                        description: read_string(bytes, macho_va_to_offset(raw_desc.description as u64), raw_desc.description_length as usize)?,
                     });
                 }
             }
@@ -270,24 +269,9 @@ fn macho_architecture(macho: &MachO) -> PluginArchitecture {
     }
 }
 
-fn macho_read_sliceref(bytes: &[u8], ptr: u64, len: usize) -> Result<String> {
-    if ptr == 0 {
-        return Err(Error::Parse(
-            "unable to read referenced string in binary".to_owned(),
-        ));
-    }
-
+fn macho_va_to_offset(va: u64) -> usize {
     // TODO: why is this offset padded so high? is there a vm base somewhere?
-    let offset = (ptr & 0xffff_ffff) as usize;
-    if offset + len > bytes.len() {
-        return Err(Error::Parse(
-            "referenced string is out of bounds".to_owned(),
-        ));
-    }
-    let mut buffer = vec![0u8; len];
-    buffer.copy_from_slice(&bytes[offset..offset + len]);
-
-    Ok(std::str::from_utf8(&buffer[..])?.to_owned())
+    (va & 0xffff_ffff) as usize
 }
 
 /// Parses the descriptors in an ELF binary.
@@ -343,9 +327,9 @@ fn elf_parse_descriptors(bytes: &[u8], elf: &Elf) -> Result<Vec<PluginDescriptor
                     architecture: elf_architecture(elf),
                     file_type: PluginFileType::Elf,
                     plugin_version: raw_desc.plugin_version,
-                    name: elf_read_sliceref(bytes, raw_desc.name, raw_desc.name_length as usize)?,
-                    version: elf_read_sliceref(bytes, raw_desc.version, raw_desc.version_length as usize)?,
-                    description: elf_read_sliceref(bytes, raw_desc.description, raw_desc.description_length as usize)?,
+                    name: read_string(bytes, raw_desc.name as usize, raw_desc.name_length as usize)?,
+                    version: read_string(bytes, raw_desc.version as usize, raw_desc.version_length as usize)?,
+                    description: read_string(bytes, raw_desc.description as usize, raw_desc.description_length as usize)?,
                 });
             } else {
                 let mut raw_desc = data_view.read::<PluginDescriptor32>(offset as usize);
@@ -359,9 +343,9 @@ fn elf_parse_descriptors(bytes: &[u8], elf: &Elf) -> Result<Vec<PluginDescriptor
                     architecture: elf_architecture(elf),
                     file_type: PluginFileType::Elf,
                     plugin_version: raw_desc.plugin_version,
-                    name: elf_read_sliceref(bytes, raw_desc.name as u64, raw_desc.name_length as usize)?,
-                    version: elf_read_sliceref(bytes, raw_desc.version as u64, raw_desc.version_length as usize)?,
-                    description: elf_read_sliceref(bytes, raw_desc.description as u64, raw_desc.description_length as usize)?,
+                    name: read_string(bytes, raw_desc.name as usize, raw_desc.name_length as usize)?,
+                    version: read_string(bytes, raw_desc.version as usize, raw_desc.version_length as usize)?,
+                    description: read_string(bytes, raw_desc.description as usize, raw_desc.description_length as usize)?,
                 });
             }
         }
@@ -419,24 +403,4 @@ where
         }
     }
     Ok(())
-}
-
-fn elf_read_sliceref(bytes: &[u8], ptr: u64, len: usize) -> Result<String> {
-    if ptr == 0 {
-        return Err(Error::Parse(
-            "unable to read referenced string in binary".to_owned(),
-        ));
-    }
-
-    // for elf no further mangling has to be done here
-    let offset = ptr as usize;
-    if offset + len > bytes.len() {
-        return Err(Error::Parse(
-            "referenced string is out of bounds".to_owned(),
-        ));
-    }
-    let mut buffer = vec![0u8; len];
-    buffer.copy_from_slice(&bytes[offset..offset + len]);
-
-    Ok(std::str::from_utf8(&buffer[..])?.to_owned())
 }
