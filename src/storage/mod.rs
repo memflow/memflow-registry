@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use log::{info, warn};
-use parking_lot::RwLock;
+use log::info;
+use parking_lot::{lock_api::RwLockReadGuard, RawRwLock, RwLock};
 use serde::{Deserialize, Serialize};
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
@@ -101,64 +101,61 @@ impl Storage {
         Ok(())
     }
 
-    pub async fn download(
-        &self,
-        plugin_name: &str,
-        plugin_version: i32,
-        file_type: &PluginFileType,
-        architecture: &PluginArchitecture,
-        tag: &str,
-    ) -> Result<File> {
+    pub async fn download(&self, digest: &str) -> Result<File> {
         let plugin_info = {
             let lock = self.database.read();
-            lock.find(plugin_name, plugin_version, file_type, architecture, tag)
-                .ok_or_else(|| Error::NotFound("plugin not found".to_owned()))?
-                .clone()
+            lock.find(PluginDatabaseFindParams {
+                digest: Some(digest.to_owned()),
+                limit: Some(1),
+                ..Default::default()
+            })
+            .first()
+            .ok_or_else(|| Error::NotFound("plugin not found".to_owned()))?
+            .to_owned()
         };
 
         let mut file_name = self.root.clone().join(&plugin_info.digest);
         file_name.set_extension("plugin");
         Ok(File::open(&file_name).await?)
     }
+
+    #[inline]
+    pub fn database(&self) -> RwLockReadGuard<RawRwLock, PluginDatabase> {
+        self.database.read()
+    }
 }
 
-struct PluginDatabase {
-    // plugin_name -> plugin_versions -> os -> architectures -> tags -> info
-    plugins_by_name: HashMap<String, PluginVersions>,
-    plugins_by_digest: HashMap<String, PluginInfo>,
+pub struct PluginDatabase {
+    plugins: Vec<PluginEntry>,
+    plugins_by_digest: HashMap<String, usize>,
+    // TODO: indexing
 }
 
-#[derive(Default)]
-struct PluginVersions {
-    versions: HashMap<i32, PluginTypes>,
+#[derive(Clone, Serialize)]
+pub struct PluginEntry {
+    descriptor: PluginDescriptor,
+    digest: String,
+    tag: String,
 }
 
-#[derive(Default)]
-struct PluginTypes {
-    types: HashMap<PluginFileType, PluginArchitectures>,
-}
+#[derive(Debug, Default, Clone, Deserialize)]
+pub struct PluginDatabaseFindParams {
+    pub plugin_name: Option<String>,
+    pub plugin_version: Option<i32>,
+    pub file_type: Option<PluginFileType>,
+    pub architecture: Option<PluginArchitecture>,
+    pub digest: Option<String>,
+    pub tag: Option<String>,
 
-#[derive(Default)]
-struct PluginArchitectures {
-    architectures: HashMap<PluginArchitecture, PluginTags>,
-}
-
-#[derive(Default)]
-struct PluginTags {
-    tags: HashMap<String, PluginInfo>,
-}
-
-// TODO: multiple tags/versions
-#[derive(Clone)]
-struct PluginInfo {
-    pub descriptor: PluginDescriptor,
-    pub digest: String,
+    // pagination parameters
+    pub skip: Option<usize>,
+    pub limit: Option<usize>,
 }
 
 impl PluginDatabase {
     pub fn new() -> Self {
         Self {
-            plugins_by_name: HashMap::new(),
+            plugins: Vec::new(),
             plugins_by_digest: HashMap::new(),
         }
     }
@@ -169,64 +166,74 @@ impl PluginDatabase {
             descriptor, digest
         );
 
-        let plugin_versions = self
-            .plugins_by_name
-            .entry(descriptor.name.clone())
-            .or_default();
-        let plugin_type = plugin_versions
-            .versions
-            .entry(descriptor.plugin_version)
-            .or_default();
-        let plugin_architecture = plugin_type.types.entry(descriptor.file_type).or_default();
-        let plugin_tags = plugin_architecture
-            .architectures
-            .entry(descriptor.architecture)
-            .or_default();
-
-        let plugin_info = PluginInfo {
-            descriptor: descriptor.clone(),
-            digest: digest.to_owned(),
-        };
-
         let digest_short = &digest[..7];
 
-        let mut replace = false;
+        // TODO: check for duplicate entries?
+        self.plugins.push(PluginEntry {
+            descriptor: descriptor.clone(),
+            digest: digest.to_owned(),
+            tag: digest_short.to_owned(),
+        });
 
-        replace = replace
-            || plugin_tags
-                .tags
-                .insert("latest".to_owned(), plugin_info.clone())
-                .is_some();
-        replace = replace
-            || plugin_tags
-                .tags
-                .insert(digest_short.to_owned(), plugin_info.clone())
-                .is_some();
-        replace = replace
-            || self
-                .plugins_by_digest
-                .insert(digest.to_owned(), plugin_info)
-                .is_some();
+        self.plugins_by_digest
+            .insert(digest.to_owned(), self.plugins.len() - 1);
 
-        if replace {
-            warn!("replaced previous connector release");
-        }
+        /*
+         self.plugins.push(PluginEntry {
+            descriptor: descriptor.clone(),
+            digest: digest.to_owned(),
+            tag: "latest".to_owned(),
+         });
+        */
 
         Ok(())
     }
 
-    fn find(
-        &self,
-        plugin_name: &str,
-        plugin_version: i32,
-        file_type: &PluginFileType,
-        architecture: &PluginArchitecture,
-        tag: &str,
-    ) -> Option<&PluginInfo> {
-        let plugin_versions = self.plugins_by_name.get(plugin_name)?;
-        let plugin_type = plugin_versions.versions.get(&plugin_version)?;
-        let plugin_architecture = plugin_type.types.get(file_type)?;
-        let plugin_tags = plugin_architecture.architectures.get(architecture)?;
-        plugin_tags.tags.get(tag)
+    pub fn find(&self, params: PluginDatabaseFindParams) -> Vec<PluginEntry> {
+        self.plugins
+            .iter()
+            .skip(params.skip.unwrap_or(0))
+            .filter(|p| {
+                if let Some(plugin_name) = &params.plugin_name {
+                    if *plugin_name != p.descriptor.name {
+                        return false;
+                    }
+                }
+
+                if let Some(plugin_version) = params.plugin_version {
+                    if plugin_version != p.descriptor.plugin_version {
+                        return false;
+                    }
+                }
+
+                if let Some(file_type) = params.file_type {
+                    if file_type != p.descriptor.file_type {
+                        return false;
+                    }
+                }
+
+                if let Some(architecture) = params.architecture {
+                    if architecture != p.descriptor.architecture {
+                        return false;
+                    }
+                }
+
+                if let Some(digest) = &params.digest {
+                    if *digest != p.digest {
+                        return false;
+                    }
+                }
+
+                if let Some(tag) = &params.tag {
+                    if *tag != p.tag {
+                        return false;
+                    }
+                }
+
+                true
+            })
+            .take(params.limit.unwrap_or(50).min(50))
+            .map(|p| p.to_owned())
+            .collect::<Vec<_>>()
     }
 }

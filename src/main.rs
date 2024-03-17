@@ -1,13 +1,13 @@
 use axum::{
     body::Body,
-    extract::{DefaultBodyLimit, Multipart, Query, State},
+    extract::{DefaultBodyLimit, Multipart, Path, Query, State},
     http::{
         header::{CONTENT_LENGTH, CONTENT_TYPE},
         HeaderValue, StatusCode,
     },
     response::IntoResponse,
     routing::{get, post},
-    Router,
+    Json, Router,
 };
 use bytes::BytesMut;
 use error::ResponseResult;
@@ -16,10 +16,10 @@ use tokio_util::io::ReaderStream;
 
 mod error;
 mod storage;
-use serde::Deserialize;
+use serde::Serialize;
 use storage::{
-    plugin_analyzer::{self, PluginArchitecture, PluginFileType},
-    Storage,
+    plugin_analyzer::{self},
+    PluginDatabaseFindParams, PluginEntry, Storage,
 };
 
 #[tokio::main]
@@ -31,7 +31,8 @@ async fn main() {
     // build our application with a single route
     let app = Router::new()
         .route("/", post(plugin_push))
-        .route("/", get(plugin_pull))
+        .route("/find", get(plugin_find))
+        .route("/:digest", get(plugin_pull))
         .layer(DefaultBodyLimit::max(20 * 1024 * 1024)) // 20 mb
         .with_state(store);
 
@@ -79,30 +80,35 @@ async fn plugin_push(
     Ok(())
 }
 
-#[derive(Debug, Deserialize)]
-struct PluginPullParams {
-    plugin_name: String,
-    plugin_version: i32,
-    file_type: PluginFileType,
-    architecture: PluginArchitecture,
-    tag: Option<String>,
+#[derive(Clone, Serialize)]
+struct PluginListResponse {
+    plugins: Vec<PluginEntry>,
+    skip: usize,
+}
+
+async fn plugin_find(
+    State(storage): State<Storage>,
+    params: Query<PluginDatabaseFindParams>,
+) -> ResponseResult<Json<PluginListResponse>> {
+    let params: PluginDatabaseFindParams = params.0;
+
+    // find entries in database
+    let entries = storage.database().find(params.clone());
+
+    Ok(PluginListResponse {
+        plugins: entries,
+        skip: params.skip.unwrap_or(0),
+    }
+    .into())
 }
 
 async fn plugin_pull(
     State(storage): State<Storage>,
-    params: Query<PluginPullParams>,
+    Path(digest): Path<String>,
 ) -> ResponseResult<impl IntoResponse> {
-    let params: PluginPullParams = params.0;
-
-    // try to open the file
+    // try to download the file by its digest
     let file = storage
-        .download(
-            &params.plugin_name,
-            params.plugin_version,
-            &params.file_type,
-            &params.architecture,
-            params.tag.as_ref().map(String::as_ref).unwrap_or("latest"),
-        )
+        .download(&digest)
         .await
         .map_err(|_| (StatusCode::NOT_FOUND, "plugin not found".to_owned()))?;
 
