@@ -1,4 +1,4 @@
-mod plugin_analyzer;
+pub mod plugin_analyzer;
 
 /// Metadata attached to each file
 pub struct FileMetadata {
@@ -17,7 +17,7 @@ impl Storage {
     pub fn new() -> Self {
         // TODO: re-index all files
         let paths = std::fs::read_dir("./.storage").unwrap();
-        for path in paths.filter_map(|p| p.ok()) {
+        /*for path in paths.filter_map(|p| p.ok()) {
             println!("parsing file: {:?}", path.path());
             // TODO: filter by filename
             // TODO: filter by size
@@ -34,7 +34,7 @@ impl Storage {
                 println!("version: {}", descriptor.version);
                 println!("description: {}", descriptor.description);
             }
-        }
+        }*/
 
         Self {}
     }

@@ -3,9 +3,12 @@ use std::ops::Range;
 use constcat::concat;
 use dataview::{DataView, Pod};
 use goblin::{
-    elf::{section_header::SHN_XINDEX, Elf},
-    mach::{Mach, MachO, SingleArch},
-    pe::{self, options::ParseOptions, PE},
+    elf::{header::ELFMAG, section_header::SHN_XINDEX, Elf},
+    mach::{
+        header::{MH_CIGAM, MH_CIGAM_64, MH_MAGIC, MH_MAGIC_64},
+        Mach, MachO, SingleArch,
+    },
+    pe::{self, header::PE_MAGIC, options::ParseOptions, PE},
     Object,
 };
 use num_traits::{NumCast, WrappingAdd, WrappingSub, Zero};
@@ -78,6 +81,18 @@ pub struct PluginDescriptor {
     pub name: String,
     pub version: String,
     pub description: String,
+}
+
+/// Peaks into the first 4 bytes of the header and matches it against a known set of binary magic constants.
+pub fn is_binary(bytes: &[u8]) -> Result<()> {
+    let view = DataView::from(bytes);
+    let elfmag = u32::from_le_bytes(*ELFMAG);
+    match view.read::<u32>(0) {
+        PE_MAGIC => Ok(()),                                        // PE
+        MH_MAGIC | MH_CIGAM | MH_MAGIC_64 | MH_CIGAM_64 => Ok(()), // Mach
+        mag if mag == elfmag => Ok(()),                            // Elf
+        _ => Err(Error::Parse("unknown binary format".to_owned())),
+    }
 }
 
 /// Parses and returns all descriptors found in the binary.
