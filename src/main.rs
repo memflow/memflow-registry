@@ -1,5 +1,5 @@
 use axum::{
-    extract::{DefaultBodyLimit, Multipart},
+    extract::{DefaultBodyLimit, Multipart, State},
     http::StatusCode,
     routing::{get, post},
     Router,
@@ -8,18 +8,18 @@ use bytes::BytesMut;
 use error::ResponseResult;
 use log::info;
 
-use crate::storage::plugin_analyzer;
-
 mod error;
 mod storage;
+use storage::{plugin_analyzer, Storage};
 
 #[tokio::main]
 async fn main() {
-    let store = storage::Storage::new();
+    let store = Storage::new();
 
     // build our application with a single route
     let app = Router::new()
         .route("/", post(plugin_push))
+        .with_state(store)
         .layer(DefaultBodyLimit::max(20 * 1024 * 1024)); // 20 mb
 
     // run our app with hyper, listening globally on port 3000
@@ -29,7 +29,10 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-async fn plugin_push(mut multipart: Multipart) -> ResponseResult<()> {
+async fn plugin_push(
+    State(storage): State<Storage>,
+    mut multipart: Multipart,
+) -> ResponseResult<()> {
     while let Some(mut field) = multipart
         .next_field()
         .await
@@ -57,9 +60,7 @@ async fn plugin_push(mut multipart: Multipart) -> ResponseResult<()> {
         }
         let data = data.freeze();
 
-        // parse descriptors
-        let descriptors = plugin_analyzer::parse_descriptors(&data[..]).unwrap();
-        println!("descriptors: {:?}", descriptors);
+        storage.upload(&data[..]).await.unwrap();
     }
 
     Ok(())

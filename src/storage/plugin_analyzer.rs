@@ -12,6 +12,7 @@ use goblin::{
     Object,
 };
 use num_traits::{NumCast, WrappingAdd, WrappingSub, Zero};
+use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 
@@ -57,7 +58,7 @@ struct PluginDescriptor64 {
 const _: [(); std::mem::size_of::<PluginDescriptor64>()] = [(); 0x60];
 unsafe impl Pod for PluginDescriptor64 {}
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum PluginArchitecture {
     Unknown(u32),
     X86,
@@ -66,14 +67,14 @@ pub enum PluginArchitecture {
     Arm64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum PluginFileType {
     Pe,
     Elf,
     Mach,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct PluginDescriptor {
     pub architecture: PluginArchitecture,
     pub file_type: PluginFileType,

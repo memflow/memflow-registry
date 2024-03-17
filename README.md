@@ -14,3 +14,5 @@ cargo run --release
 ```
 curl -F 'file=@.storage.bak/libmemflow_coredump.aarch64.so' http://localhost:3000/
 ```
+
+https://crates.io/crates/openapi-tui
