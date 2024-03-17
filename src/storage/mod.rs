@@ -1,14 +1,14 @@
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
+use log::{info, warn};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use tokio::fs::File;
-use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
-use uuid::Uuid;
+use tokio::io::AsyncWriteExt;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 
 pub mod plugin_analyzer;
 use plugin_analyzer::PluginDescriptor;
@@ -22,6 +22,10 @@ pub struct PluginMetadata {
     // // TODO: plugin type
     // pub tag: String,
     // TODO: do we need more?
+    /// The sha256sum of the binary file
+    pub digest: String,
+
+    /// The plugin descriptor
     pub descriptors: Vec<PluginDescriptor>,
 }
 
@@ -41,7 +45,6 @@ impl Storage {
         for path in paths.filter_map(|p| p.ok()) {
             if let Some(extension) = path.path().extension() {
                 if extension.to_str().unwrap_or_default() == "meta" {
-                    println!("parsing file: {:?}", path.path());
                     let metadata: PluginMetadata =
                         serde_json::from_str(&std::fs::read_to_string(path.path()).unwrap())
                             .unwrap();
@@ -68,39 +71,61 @@ impl Storage {
         let descriptors = plugin_analyzer::parse_descriptors(bytes)?;
 
         // TODO: reuse original file extension
-        let id = Uuid::new_v4();
+        let digest = sha256::digest(bytes);
+
+        // TODO: check if digest exist, so we do not add duplicate files
 
         // write plugin
-        let mut file_name = self.root.clone().join(id.to_string());
+        let mut file_name = self.root.clone().join(&digest);
         file_name.set_extension("plugin");
         let mut plugin_file = File::create(&file_name).await?;
-        let n = plugin_file.write(bytes).await?;
-        println!("Wrote the first {} bytes of 'some bytes'.", n);
+        plugin_file.write_all(bytes).await?;
 
         // write metadata
         let metadata = PluginMetadata {
+            digest: digest.clone(),
             descriptors: descriptors.clone(),
         };
         file_name.set_extension("meta");
         let mut metadata_file = File::create(&file_name).await?;
-        let n = metadata_file
-            .write(serde_json::to_string(&metadata).unwrap().as_bytes())
+        metadata_file
+            .write_all(serde_json::to_string(&metadata).unwrap().as_bytes())
             .await?;
-        println!("Wrote the first {} bytes of 'some bytes'.", n);
 
         // add to database
         let mut database = self.database.write();
         for descriptor in descriptors.iter() {
-            database.insert(descriptor, &id.to_string())?;
+            database.insert(descriptor, &digest)?;
         }
 
         Ok(())
     }
+
+    pub async fn download(
+        &self,
+        plugin_name: &str,
+        plugin_version: i32,
+        file_type: &PluginFileType,
+        architecture: &PluginArchitecture,
+        tag: &str,
+    ) -> Result<File> {
+        let plugin_info = {
+            let lock = self.database.read();
+            lock.find(plugin_name, plugin_version, file_type, architecture, tag)
+                .ok_or_else(|| Error::NotFound("plugin not found".to_owned()))?
+                .clone()
+        };
+
+        let mut file_name = self.root.clone().join(&plugin_info.digest);
+        file_name.set_extension("plugin");
+        Ok(File::open(&file_name).await?)
+    }
 }
 
 struct PluginDatabase {
-    // plugin_name -> plugin_versions -> os -> architectures -> info
-    plugins: HashMap<String, PluginVersions>,
+    // plugin_name -> plugin_versions -> os -> architectures -> tags -> info
+    plugins_by_name: HashMap<String, PluginVersions>,
+    plugins_by_digest: HashMap<String, PluginInfo>,
 }
 
 #[derive(Default)]
@@ -115,36 +140,93 @@ struct PluginTypes {
 
 #[derive(Default)]
 struct PluginArchitectures {
-    architectures: HashMap<PluginArchitecture, PluginInfo>,
+    architectures: HashMap<PluginArchitecture, PluginTags>,
+}
+
+#[derive(Default)]
+struct PluginTags {
+    tags: HashMap<String, PluginInfo>,
 }
 
 // TODO: multiple tags/versions
+#[derive(Clone)]
 struct PluginInfo {
-    descriptor: PluginDescriptor,
-    file_name: String,
+    pub descriptor: PluginDescriptor,
+    pub digest: String,
 }
 
 impl PluginDatabase {
     pub fn new() -> Self {
         Self {
-            plugins: HashMap::new(),
+            plugins_by_name: HashMap::new(),
+            plugins_by_digest: HashMap::new(),
         }
     }
 
-    pub fn insert(&mut self, descriptor: &PluginDescriptor, file_name: &str) -> Result<()> {
-        let plugin_versions = self.plugins.entry(descriptor.name.clone()).or_default();
+    pub fn insert(&mut self, descriptor: &PluginDescriptor, digest: &str) -> Result<()> {
+        info!(
+            "adding plugin variant to db: descriptor={:?}, digest={}",
+            descriptor, digest
+        );
+
+        let plugin_versions = self
+            .plugins_by_name
+            .entry(descriptor.name.clone())
+            .or_default();
         let plugin_type = plugin_versions
             .versions
             .entry(descriptor.plugin_version)
             .or_default();
         let plugin_architecture = plugin_type.types.entry(descriptor.file_type).or_default();
-        let plugin_info = plugin_architecture
+        let plugin_tags = plugin_architecture
             .architectures
             .entry(descriptor.architecture)
-            .or_insert_with(|| PluginInfo {
-                descriptor: descriptor.clone(),
-                file_name: file_name.to_owned(),
-            });
+            .or_default();
+
+        let plugin_info = PluginInfo {
+            descriptor: descriptor.clone(),
+            digest: digest.to_owned(),
+        };
+
+        let digest_short = &digest[..7];
+
+        let mut replace = false;
+
+        replace = replace
+            || plugin_tags
+                .tags
+                .insert("latest".to_owned(), plugin_info.clone())
+                .is_some();
+        replace = replace
+            || plugin_tags
+                .tags
+                .insert(digest_short.to_owned(), plugin_info.clone())
+                .is_some();
+        replace = replace
+            || self
+                .plugins_by_digest
+                .insert(digest.to_owned(), plugin_info)
+                .is_some();
+
+        if replace {
+            warn!("replaced previous connector release");
+        }
+
         Ok(())
+    }
+
+    fn find(
+        &self,
+        plugin_name: &str,
+        plugin_version: i32,
+        file_type: &PluginFileType,
+        architecture: &PluginArchitecture,
+        tag: &str,
+    ) -> Option<&PluginInfo> {
+        let plugin_versions = self.plugins_by_name.get(plugin_name)?;
+        let plugin_type = plugin_versions.versions.get(&plugin_version)?;
+        let plugin_architecture = plugin_type.types.get(file_type)?;
+        let plugin_tags = plugin_architecture.architectures.get(architecture)?;
+        plugin_tags.tags.get(tag)
     }
 }

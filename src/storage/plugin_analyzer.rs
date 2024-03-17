@@ -8,7 +8,7 @@ use goblin::{
         header::{MH_CIGAM, MH_CIGAM_64, MH_MAGIC, MH_MAGIC_64},
         Mach, MachO, SingleArch,
     },
-    pe::{self, header::PE_MAGIC, options::ParseOptions, PE},
+    pe::{self, header::DOS_MAGIC, options::ParseOptions, PE},
     Object,
 };
 use num_traits::{NumCast, WrappingAdd, WrappingSub, Zero};
@@ -76,8 +76,8 @@ pub enum PluginFileType {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginDescriptor {
-    pub architecture: PluginArchitecture,
     pub file_type: PluginFileType,
+    pub architecture: PluginArchitecture,
     pub plugin_version: i32,
     pub name: String,
     pub version: String,
@@ -89,10 +89,13 @@ pub fn is_binary(bytes: &[u8]) -> Result<()> {
     let view = DataView::from(bytes);
     let elfmag = u32::from_le_bytes(*ELFMAG);
     match view.read::<u32>(0) {
-        PE_MAGIC => Ok(()),                                        // PE
-        MH_MAGIC | MH_CIGAM | MH_MAGIC_64 | MH_CIGAM_64 => Ok(()), // Mach
-        mag if mag == elfmag => Ok(()),                            // Elf
-        _ => Err(Error::Parse("unknown binary format".to_owned())),
+        tag if (tag as u16) == DOS_MAGIC => Ok(()),
+        MH_MAGIC | MH_CIGAM | MH_MAGIC_64 | MH_CIGAM_64 => Ok(()),
+        mag if mag == elfmag => Ok(()),
+        tag => Err(Error::Parse(format!(
+            "unknown binary format (tag={:#X})",
+            tag
+        ))),
     }
 }
 
@@ -123,8 +126,8 @@ fn pe_parse_descriptors(bytes: &[u8], pe: &PE) -> Result<Vec<PluginDescriptor>> 
                         let raw_desc = data_view.read::<PluginDescriptor64>(offset);
                         #[rustfmt::skip]
                         ret.push(PluginDescriptor {
-                            architecture: pe_architecture(pe),
                             file_type: PluginFileType::Pe,
+                            architecture: pe_architecture(pe),
                             plugin_version: raw_desc.plugin_version,
                             name: read_string(bytes, pe_va_to_offset(pe, raw_desc.name), raw_desc.name_length as usize)?,
                             version: read_string(bytes, pe_va_to_offset(pe, raw_desc.version), raw_desc.version_length as usize)?,
@@ -134,8 +137,8 @@ fn pe_parse_descriptors(bytes: &[u8], pe: &PE) -> Result<Vec<PluginDescriptor>> 
                         let raw_desc = data_view.read::<PluginDescriptor32>(offset);
                         #[rustfmt::skip]
                         ret.push(PluginDescriptor {
-                            architecture: pe_architecture(pe),
                             file_type: PluginFileType::Pe,
+                            architecture: pe_architecture(pe),
                             plugin_version: raw_desc.plugin_version,
                             name: read_string(bytes, pe_va_to_offset(pe, raw_desc.name as u64), raw_desc.name_length as usize)?,
                             version: read_string(bytes, pe_va_to_offset(pe, raw_desc.version as u64), raw_desc.version_length as usize)?,
@@ -248,8 +251,8 @@ fn macho_parse_descriptors(bytes: &[u8], macho: &MachO) -> Result<Vec<PluginDesc
                     let raw_desc = data_view.read::<PluginDescriptor64>(offset as usize);
                     #[rustfmt::skip]
                     ret.push(PluginDescriptor{
-                        architecture: macho_architecture(macho),
                         file_type: PluginFileType::Mach,
+                        architecture: macho_architecture(macho),
                         plugin_version: raw_desc.plugin_version,
                         name: read_string(bytes, macho_va_to_offset(raw_desc.name), raw_desc.name_length as usize)?,
                         version: read_string(bytes, macho_va_to_offset(raw_desc.version), raw_desc.version_length as usize)?,
@@ -259,8 +262,8 @@ fn macho_parse_descriptors(bytes: &[u8], macho: &MachO) -> Result<Vec<PluginDesc
                     let raw_desc = data_view.read::<PluginDescriptor32>(offset as usize);
                     #[rustfmt::skip]
                     ret.push(PluginDescriptor{
-                        architecture: macho_architecture(macho),
                         file_type: PluginFileType::Mach,
+                        architecture: macho_architecture(macho),
                         plugin_version: raw_desc.plugin_version,
                         name: read_string(bytes, macho_va_to_offset(raw_desc.name as u64), raw_desc.name_length as usize)?,
                         version: read_string(bytes, macho_va_to_offset(raw_desc.version as u64), raw_desc.version_length as usize)?,
@@ -340,8 +343,8 @@ fn elf_parse_descriptors(bytes: &[u8], elf: &Elf) -> Result<Vec<PluginDescriptor
                 )?;
                 #[rustfmt::skip]
                 ret.push(PluginDescriptor{
-                    architecture: elf_architecture(elf),
                     file_type: PluginFileType::Elf,
+                    architecture: elf_architecture(elf),
                     plugin_version: raw_desc.plugin_version,
                     name: read_string(bytes, raw_desc.name as usize, raw_desc.name_length as usize)?,
                     version: read_string(bytes, raw_desc.version as usize, raw_desc.version_length as usize)?,
@@ -356,8 +359,8 @@ fn elf_parse_descriptors(bytes: &[u8], elf: &Elf) -> Result<Vec<PluginDescriptor
                 )?;
                 #[rustfmt::skip]
                 ret.push(PluginDescriptor{
-                    architecture: elf_architecture(elf),
                     file_type: PluginFileType::Elf,
+                    architecture: elf_architecture(elf),
                     plugin_version: raw_desc.plugin_version,
                     name: read_string(bytes, raw_desc.name as usize, raw_desc.name_length as usize)?,
                     version: read_string(bytes, raw_desc.version as usize, raw_desc.version_length as usize)?,

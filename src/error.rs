@@ -11,6 +11,8 @@ pub enum Error {
     IO(String),
     #[error("Parse error: {0}")]
     Parse(String),
+    #[error("Not found: {0}")]
+    NotFound(String),
     #[error("Not implemented: {0}")]
     NotImplemented(String),
     #[error("Goblin error: {0}")]
