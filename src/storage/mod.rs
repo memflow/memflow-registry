@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -104,9 +103,14 @@ impl Storage {
     pub async fn download(&self, digest: &str) -> Result<File> {
         let plugin_info = {
             let lock = self.database.read();
-            lock.get(digest)
-                .ok_or_else(|| Error::NotFound("plugin not found".to_owned()))?
-                .to_owned()
+            lock.find(PluginDatabaseFindParams {
+                digest: Some(digest.to_owned()),
+                limit: Some(1),
+                ..Default::default()
+            })
+            .first()
+            .ok_or_else(|| Error::NotFound("plugin not found".to_owned()))?
+            .to_owned()
         };
 
         let mut file_name = self.root.clone().join(&plugin_info.digest);
@@ -122,8 +126,6 @@ impl Storage {
 
 pub struct PluginDatabase {
     plugins: Vec<PluginEntry>,
-    plugins_by_digest: HashMap<String, usize>,
-    // TODO: indexing
 }
 
 #[derive(Clone, Serialize)]
@@ -151,7 +153,6 @@ impl PluginDatabase {
     pub fn new() -> Self {
         Self {
             plugins: Vec::new(),
-            plugins_by_digest: HashMap::new(),
         }
     }
 
@@ -170,15 +171,7 @@ impl PluginDatabase {
             tag: digest_short.to_owned(),
         });
 
-        self.plugins_by_digest
-            .insert(digest.to_owned(), self.plugins.len() - 1);
-
         Ok(())
-    }
-
-    pub fn get(&self, digest: &str) -> Option<PluginEntry> {
-        let index = self.plugins_by_digest.get(digest)?;
-        self.plugins.get(*index).cloned()
     }
 
     pub fn find(&self, params: PluginDatabaseFindParams) -> Vec<PluginEntry> {
