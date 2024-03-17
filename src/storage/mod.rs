@@ -1,5 +1,8 @@
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use tokio::fs::File;
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
@@ -9,6 +12,8 @@ use crate::error::Result;
 
 pub mod plugin_analyzer;
 use plugin_analyzer::PluginDescriptor;
+
+use self::plugin_analyzer::{PluginArchitecture, PluginFileType};
 
 /// Metadata attached to each file
 #[derive(Debug, Serialize, Deserialize)]
@@ -24,36 +29,37 @@ pub struct PluginMetadata {
 #[derive(Clone)]
 pub struct Storage {
     root: PathBuf,
-    database: PluginDatabase,
+    database: Arc<RwLock<PluginDatabase>>,
 }
 
 impl Storage {
     pub fn new() -> Self {
-        // TODO: re-index all files
         // TODO: create path if not exists
-        let paths = std::fs::read_dir("./.storage").unwrap();
-        /*for path in paths.filter_map(|p| p.ok()) {
-            println!("parsing file: {:?}", path.path());
-            // TODO: filter by filename
-            // TODO: filter by size
-            let bytes = std::fs::read(path.path()).unwrap();
+        let mut database = PluginDatabase::new();
 
-            let descriptors = plugin_analyzer::parse_descriptors(&bytes[..]).unwrap();
-            for descriptor in descriptors.iter() {
-                if descriptor.version.is_empty() {
-                    panic!();
+        let paths = std::fs::read_dir("./.storage").unwrap();
+        for path in paths.filter_map(|p| p.ok()) {
+            if let Some(extension) = path.path().extension() {
+                if extension.to_str().unwrap_or_default() == "meta" {
+                    println!("parsing file: {:?}", path.path());
+                    let metadata: PluginMetadata =
+                        serde_json::from_str(&std::fs::read_to_string(path.path()).unwrap())
+                            .unwrap();
+                    for descriptor in metadata.descriptors.iter() {
+                        database
+                            .insert(
+                                descriptor,
+                                path.path().file_stem().unwrap().to_str().unwrap(),
+                            )
+                            .unwrap();
+                    }
                 }
-                println!("architecture: {:?}", descriptor.architecture);
-                println!("plugin_version: {}", descriptor.plugin_version);
-                println!("name: {}", descriptor.name);
-                println!("version: {}", descriptor.version);
-                println!("description: {}", descriptor.description);
             }
-        }*/
+        }
 
         Self {
             root: "./.storage".into(),
-            database: PluginDatabase::new(),
+            database: Arc::new(RwLock::new(database)),
         }
     }
 
@@ -72,7 +78,9 @@ impl Storage {
         println!("Wrote the first {} bytes of 'some bytes'.", n);
 
         // write metadata
-        let metadata = PluginMetadata { descriptors };
+        let metadata = PluginMetadata {
+            descriptors: descriptors.clone(),
+        };
         file_name.set_extension("meta");
         let mut metadata_file = File::create(&file_name).await?;
         let n = metadata_file
@@ -81,16 +89,62 @@ impl Storage {
         println!("Wrote the first {} bytes of 'some bytes'.", n);
 
         // add to database
+        let mut database = self.database.write();
+        for descriptor in descriptors.iter() {
+            database.insert(descriptor, &id.to_string())?;
+        }
 
         Ok(())
     }
 }
 
-#[derive(Clone)]
-struct PluginDatabase {}
+struct PluginDatabase {
+    // plugin_name -> plugin_versions -> os -> architectures -> info
+    plugins: HashMap<String, PluginVersions>,
+}
+
+#[derive(Default)]
+struct PluginVersions {
+    versions: HashMap<i32, PluginTypes>,
+}
+
+#[derive(Default)]
+struct PluginTypes {
+    types: HashMap<PluginFileType, PluginArchitectures>,
+}
+
+#[derive(Default)]
+struct PluginArchitectures {
+    architectures: HashMap<PluginArchitecture, PluginInfo>,
+}
+
+// TODO: multiple tags/versions
+struct PluginInfo {
+    descriptor: PluginDescriptor,
+    file_name: String,
+}
 
 impl PluginDatabase {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            plugins: HashMap::new(),
+        }
+    }
+
+    pub fn insert(&mut self, descriptor: &PluginDescriptor, file_name: &str) -> Result<()> {
+        let plugin_versions = self.plugins.entry(descriptor.name.clone()).or_default();
+        let plugin_type = plugin_versions
+            .versions
+            .entry(descriptor.plugin_version)
+            .or_default();
+        let plugin_architecture = plugin_type.types.entry(descriptor.file_type).or_default();
+        let plugin_info = plugin_architecture
+            .architectures
+            .entry(descriptor.architecture)
+            .or_insert_with(|| PluginInfo {
+                descriptor: descriptor.clone(),
+                file_name: file_name.to_owned(),
+            });
+        Ok(())
     }
 }
