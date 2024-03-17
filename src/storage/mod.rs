@@ -104,14 +104,9 @@ impl Storage {
     pub async fn download(&self, digest: &str) -> Result<File> {
         let plugin_info = {
             let lock = self.database.read();
-            lock.find(PluginDatabaseFindParams {
-                digest: Some(digest.to_owned()),
-                limit: Some(1),
-                ..Default::default()
-            })
-            .first()
-            .ok_or_else(|| Error::NotFound("plugin not found".to_owned()))?
-            .to_owned()
+            lock.get(digest)
+                .ok_or_else(|| Error::NotFound("plugin not found".to_owned()))?
+                .to_owned()
         };
 
         let mut file_name = self.root.clone().join(&plugin_info.digest);
@@ -178,15 +173,12 @@ impl PluginDatabase {
         self.plugins_by_digest
             .insert(digest.to_owned(), self.plugins.len() - 1);
 
-        /*
-         self.plugins.push(PluginEntry {
-            descriptor: descriptor.clone(),
-            digest: digest.to_owned(),
-            tag: "latest".to_owned(),
-         });
-        */
-
         Ok(())
+    }
+
+    pub fn get(&self, digest: &str) -> Option<PluginEntry> {
+        let index = self.plugins_by_digest.get(digest)?;
+        self.plugins.get(*index).cloned()
     }
 
     pub fn find(&self, params: PluginDatabaseFindParams) -> Vec<PluginEntry> {
@@ -233,7 +225,7 @@ impl PluginDatabase {
                 true
             })
             .take(params.limit.unwrap_or(50).min(50))
-            .map(|p| p.to_owned())
+            .cloned()
             .collect::<Vec<_>>()
     }
 }
