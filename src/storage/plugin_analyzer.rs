@@ -546,4 +546,23 @@ mod tests {
             }]
         );
     }
+
+    #[test]
+    fn test_mach_arm64() {
+        let file = include_bytes!("../../assets/libmemflow_native.aarch64.dylib");
+
+        assert_eq!(is_binary(&file[..]), Ok(()));
+
+        assert_eq!(
+            parse_descriptors(&file[..]).unwrap(),
+            vec![PluginDescriptor {
+                file_type: PluginFileType::Mach,
+                architecture: PluginArchitecture::Arm64,
+                plugin_version: 1,
+                name: "native".to_owned(),
+                version: "0.2.2".to_owned(),
+                description: "System call based proxy-OS for memflow".to_owned(),
+            }]
+        );
+    }
 }
