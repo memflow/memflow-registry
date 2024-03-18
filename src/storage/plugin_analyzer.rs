@@ -74,7 +74,7 @@ pub enum PluginFileType {
     Mach,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PluginDescriptor {
     pub file_type: PluginFileType,
     pub architecture: PluginArchitecture,
@@ -422,4 +422,128 @@ where
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const NAME: &str = "coredump";
+    const VERSION: &str = "0.2.0";
+    const DESCRIPTION: &str =
+        "win32 coredump connector for the memflow physical memory introspection framework";
+
+    #[test]
+    fn test_pe_x86_64() {
+        let file = include_bytes!("../../assets/memflow_coredump.x86_64.dll");
+
+        assert_eq!(is_binary(&file[..]), Ok(()));
+
+        assert_eq!(
+            parse_descriptors(&file[..]).unwrap(),
+            vec![PluginDescriptor {
+                file_type: PluginFileType::Pe,
+                architecture: PluginArchitecture::X86_64,
+                plugin_version: 1,
+                name: NAME.to_owned(),
+                version: VERSION.to_owned(),
+                description: DESCRIPTION.to_owned(),
+            }]
+        );
+    }
+
+    #[test]
+    fn test_pe_x86() {
+        let file = include_bytes!("../../assets/memflow_coredump.x86.dll");
+
+        assert_eq!(is_binary(&file[..]), Ok(()));
+
+        assert_eq!(
+            parse_descriptors(&file[..]).unwrap(),
+            vec![PluginDescriptor {
+                file_type: PluginFileType::Pe,
+                architecture: PluginArchitecture::X86,
+                plugin_version: 1,
+                name: NAME.to_owned(),
+                version: VERSION.to_owned(),
+                description: DESCRIPTION.to_owned(),
+            }]
+        );
+    }
+
+    #[test]
+    fn test_elf_x86_64() {
+        let file = include_bytes!("../../assets/libmemflow_coredump.x86_64.so");
+
+        assert_eq!(is_binary(&file[..]), Ok(()));
+
+        assert_eq!(
+            parse_descriptors(&file[..]).unwrap(),
+            vec![PluginDescriptor {
+                file_type: PluginFileType::Elf,
+                architecture: PluginArchitecture::X86_64,
+                plugin_version: 1,
+                name: NAME.to_owned(),
+                version: VERSION.to_owned(),
+                description: DESCRIPTION.to_owned(),
+            }]
+        );
+    }
+
+    #[test]
+    fn test_elf_x86() {
+        let file = include_bytes!("../../assets/libmemflow_coredump.x86.so");
+
+        assert_eq!(is_binary(&file[..]), Ok(()));
+
+        assert_eq!(
+            parse_descriptors(&file[..]).unwrap(),
+            vec![PluginDescriptor {
+                file_type: PluginFileType::Elf,
+                architecture: PluginArchitecture::X86,
+                plugin_version: 1,
+                name: NAME.to_owned(),
+                version: VERSION.to_owned(),
+                description: DESCRIPTION.to_owned(),
+            }]
+        );
+    }
+
+    #[test]
+    fn test_elf_arm64() {
+        let file = include_bytes!("../../assets/libmemflow_coredump.aarch64.so");
+
+        assert_eq!(is_binary(&file[..]), Ok(()));
+
+        assert_eq!(
+            parse_descriptors(&file[..]).unwrap(),
+            vec![PluginDescriptor {
+                file_type: PluginFileType::Elf,
+                architecture: PluginArchitecture::Arm64,
+                plugin_version: 1,
+                name: NAME.to_owned(),
+                version: VERSION.to_owned(),
+                description: DESCRIPTION.to_owned(),
+            }]
+        );
+    }
+
+    #[test]
+    fn test_elf_arm() {
+        let file = include_bytes!("../../assets/libmemflow_coredump.arm.so");
+
+        assert_eq!(is_binary(&file[..]), Ok(()));
+
+        assert_eq!(
+            parse_descriptors(&file[..]).unwrap(),
+            vec![PluginDescriptor {
+                file_type: PluginFileType::Elf,
+                architecture: PluginArchitecture::Arm,
+                plugin_version: 1,
+                name: NAME.to_owned(),
+                version: VERSION.to_owned(),
+                description: DESCRIPTION.to_owned(),
+            }]
+        );
+    }
 }
