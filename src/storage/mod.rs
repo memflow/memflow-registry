@@ -1,6 +1,7 @@
-use std::path::PathBuf;
 use std::sync::Arc;
+use std::{cmp::Ordering, path::PathBuf};
 
+use chrono::{NaiveDateTime, Utc};
 use log::info;
 use parking_lot::{lock_api::RwLockReadGuard, RawRwLock, RwLock};
 use serde::{Deserialize, Serialize};
@@ -24,6 +25,12 @@ pub struct PluginMetadata {
     /// The sha256sum of the binary file
     pub digest: String,
 
+    /// Timestamp at which the file was added
+    pub created_at: NaiveDateTime,
+
+    /// Timestamp at when this file was added
+    // TODO: can we simply use file timestamp?
+
     /// The plugin descriptor
     pub descriptors: Vec<PluginDescriptor>,
 }
@@ -36,7 +43,7 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self> {
         // TODO: create path if not exists
         let mut database = PluginDatabase::new();
 
@@ -47,22 +54,15 @@ impl Storage {
                     let metadata: PluginMetadata =
                         serde_json::from_str(&std::fs::read_to_string(path.path()).unwrap())
                             .unwrap();
-                    for descriptor in metadata.descriptors.iter() {
-                        database
-                            .insert(
-                                descriptor,
-                                path.path().file_stem().unwrap().to_str().unwrap(),
-                            )
-                            .unwrap();
-                    }
+                    database.insert_all(&metadata)?;
                 }
             }
         }
 
-        Self {
+        Ok(Self {
             root: "./.storage".into(),
             database: Arc::new(RwLock::new(database)),
-        }
+        })
     }
 
     /// Writes the specified connector into the path and adds it into the database.
@@ -83,6 +83,7 @@ impl Storage {
         // write metadata
         let metadata = PluginMetadata {
             digest: digest.clone(),
+            created_at: Utc::now().naive_utc(),
             descriptors: descriptors.clone(),
         };
         file_name.set_extension("meta");
@@ -93,9 +94,7 @@ impl Storage {
 
         // add to database
         let mut database = self.database.write();
-        for descriptor in descriptors.iter() {
-            database.insert(descriptor, &digest)?;
-        }
+        database.insert_all(&metadata)?;
 
         Ok(())
     }
@@ -130,19 +129,20 @@ pub struct PluginDatabase {
 
 #[derive(Clone, Serialize)]
 pub struct PluginEntry {
-    descriptor: PluginDescriptor,
     digest: String,
-    tag: String,
+    created_at: NaiveDateTime,
+    descriptor: PluginDescriptor,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct PluginDatabaseFindParams {
-    pub plugin_name: Option<String>,
-    pub plugin_version: Option<i32>,
+    pub name: Option<String>,
+    pub version: Option<String>,
+    pub memflow_plugin_version: Option<i32>,
     pub file_type: Option<PluginFileType>,
     pub architecture: Option<PluginArchitecture>,
     pub digest: Option<String>,
-    pub tag: Option<String>,
+    pub digest_short: Option<String>,
 
     // pagination parameters
     pub skip: Option<usize>,
@@ -156,19 +156,27 @@ impl PluginDatabase {
         }
     }
 
-    pub fn insert(&mut self, descriptor: &PluginDescriptor, digest: &str) -> Result<()> {
-        info!(
-            "adding plugin variant to db: descriptor={:?}, digest={}",
-            descriptor, digest
-        );
+    /// Inserts all plugin variants of this file into the database
+    pub fn insert_all(&mut self, metadata: &PluginMetadata) -> Result<()> {
+        for descriptor in metadata.descriptors.iter() {
+            info!(
+                "adding plugin variant to db: digest={}; created_at={}; descriptor={:?}",
+                metadata.digest, metadata.created_at, descriptor
+            );
 
-        let digest_short = &digest[..7];
+            // TODO: check for duplicate entries?
+            self.plugins.push(PluginEntry {
+                digest: metadata.digest.to_owned(),
+                created_at: metadata.created_at,
+                descriptor: descriptor.clone(),
+            });
+        }
 
-        // TODO: check for duplicate entries?
-        self.plugins.push(PluginEntry {
-            descriptor: descriptor.clone(),
-            digest: digest.to_owned(),
-            tag: digest_short.to_owned(),
+        // sort plugins by created_at timestamp to show the newest ones first
+        self.plugins.sort_by(|a, b| {
+            b.created_at
+                .partial_cmp(&a.created_at)
+                .unwrap_or(Ordering::Equal)
         });
 
         Ok(())
@@ -179,14 +187,20 @@ impl PluginDatabase {
             .iter()
             .skip(params.skip.unwrap_or(0))
             .filter(|p| {
-                if let Some(plugin_name) = &params.plugin_name {
-                    if *plugin_name != p.descriptor.name {
+                if let Some(name) = &params.name {
+                    if *name != p.descriptor.name {
                         return false;
                     }
                 }
 
-                if let Some(plugin_version) = params.plugin_version {
-                    if plugin_version != p.descriptor.plugin_version {
+                if let Some(version) = &params.version {
+                    if *version != p.descriptor.version {
+                        return false;
+                    }
+                }
+
+                if let Some(memflow_plugin_version) = params.memflow_plugin_version {
+                    if memflow_plugin_version != p.descriptor.plugin_version {
                         return false;
                     }
                 }
@@ -209,8 +223,8 @@ impl PluginDatabase {
                     }
                 }
 
-                if let Some(tag) = &params.tag {
-                    if *tag != p.tag {
+                if let Some(digest_short) = &params.digest_short {
+                    if *digest_short != p.digest[..7] {
                         return false;
                     }
                 }

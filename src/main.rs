@@ -10,13 +10,14 @@ use axum::{
     Json, Router,
 };
 use bytes::BytesMut;
-use error::ResponseResult;
 use log::info;
+use serde::Serialize;
 use tokio_util::io::ReaderStream;
 
 mod error;
 mod storage;
-use serde::Serialize;
+
+use error::ResponseResult;
 use storage::{
     plugin_analyzer::{self},
     PluginDatabaseFindParams, PluginEntry, Storage,
@@ -26,7 +27,7 @@ use storage::{
 async fn main() {
     env_logger::init();
 
-    let store = Storage::new();
+    let store = Storage::new().expect("unable to initialize plugin store");
 
     // build our application with a single route
     let app = Router::new()
