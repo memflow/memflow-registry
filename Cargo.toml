@@ -7,6 +7,7 @@ license = "MIT"
 rust-version = "1.70.0"
 
 [dependencies]
+# axum
 log = "0.4"
 env_logger = "0.11"
 thiserror = "1.0"
@@ -28,6 +29,10 @@ sha256 = "1.5"
 parking_lot = "0.12"
 chrono = { version = "0.4", features = ["serde"] }
 
+# signatures
+k256 = { version = "0.13", features = ["serde", "pem"] }
+
 [dev-dependencies]
+# axum unit testing
 tempfile = "3.10"
 tower = "0.4"

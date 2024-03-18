@@ -25,3 +25,14 @@ curl -v http://$(hostname).local:3000/aa8067150b14bee6ee9d4edb0d51472601531437da
 ```
 
 https://crates.io/crates/openapi-tui
+
+Generate a signing keypair:
+```
+openssl ecparam -name secp256k1 -genkey | openssl pkcs8 -topk8 -nocrypt -out ec-secp256k1-priv-key.pem
+openssl ec -in ec-secp256k1-priv-key.pem -pubout > ec-secp256k1-pub-key.pem
+```
+
+Sign a connector with the newly generated private key:
+```
+cargo run --release --example sign_file assets\memflow_coredump.x86_64.dll ec-secp256k1-priv-key.pem
+```
