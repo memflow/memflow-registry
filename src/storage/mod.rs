@@ -43,11 +43,11 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub fn new() -> Result<Self> {
+    pub fn new(root: PathBuf) -> Result<Self> {
         // TODO: create path if not exists
         let mut database = PluginDatabase::new();
 
-        let paths = std::fs::read_dir("./.storage").unwrap();
+        let paths = std::fs::read_dir(&root).unwrap();
         for path in paths.filter_map(|p| p.ok()) {
             if let Some(extension) = path.path().extension() {
                 if extension.to_str().unwrap_or_default() == "meta" {
@@ -60,7 +60,7 @@ impl Storage {
         }
 
         Ok(Self {
-            root: "./.storage".into(),
+            root,
             database: Arc::new(RwLock::new(database)),
         })
     }

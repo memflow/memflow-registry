@@ -27,21 +27,27 @@ use storage::{
 async fn main() {
     env_logger::init();
 
-    let store = Storage::new().expect("unable to initialize plugin store");
+    let root = std::env::var("MEMFLOW_STORAGE_ROOT").unwrap_or_else(|_| "./.storage".into());
+    info!("storing plugins in `{}`", root);
+    let storage = Storage::new(root.into()).expect("unable to create storage handler");
 
     // build our application with a single route
-    let app = Router::new()
-        .route("/", post(plugin_push))
-        .route("/find", get(plugin_find))
-        .route("/:digest", get(plugin_pull))
-        .layer(DefaultBodyLimit::max(20 * 1024 * 1024)) // 20 mb
-        .with_state(store);
+    let app = app(storage);
 
     // run our app with hyper, listening globally on port 3000
     let addr = std::env::var("MEMFLOW_ADDR").unwrap_or_else(|_| "0.0.0.0:3000".into());
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-    info!("listening on {}", addr);
+    info!("serving memflow-registry on `{}`", addr);
     axum::serve(listener, app).await.unwrap();
+}
+
+fn app(storage: Storage) -> Router {
+    Router::new()
+        .route("/", post(plugin_push))
+        .route("/find", get(plugin_find))
+        .route("/:digest", get(plugin_pull))
+        .layer(DefaultBodyLimit::max(20 * 1024 * 1024)) // 20 mb
+        .with_state(storage)
 }
 
 async fn plugin_push(
@@ -130,4 +136,22 @@ async fn plugin_pull(
     );
 
     Ok(response)
+}
+
+#[cfg(test)]
+mod test {
+    use axum::http::Request;
+    use tower::util::ServiceExt;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn push() {
+        // create temporary directory
+        let root = tempfile::tempdir().unwrap();
+        let storage = Storage::new(root.into_path()).expect("unable to create storage handler");
+        let app = app(storage);
+
+        // run tests
+    }
 }
