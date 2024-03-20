@@ -31,7 +31,7 @@ async fn main() {
     let mut storage = Storage::new(&root).expect("unable to create storage handler");
 
     // use public key file if specified
-    if let Ok(public_key_file) = std::env::var("MEMFLOW_PUBLIC_KEY") {
+    if let Ok(public_key_file) = std::env::var("MEMFLOW_PUBLIC_KEY_FILE") {
         let signature_verifier =
             SignatureVerifier::new(public_key_file).expect("unable to load public key file");
         storage = storage.with_signature_verifier(signature_verifier);

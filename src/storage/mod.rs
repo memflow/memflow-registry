@@ -20,22 +20,12 @@ use pki::SignatureVerifier;
 /// Metadata attached to each file
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PluginMetadata {
-    // pub plugin: String,
-    // // TODO: plugin type
-    // pub tag: String,
-    // TODO: do we need more?
     /// The sha256sum of the binary file
     pub digest: String,
-
     /// File signature of this binary
     pub signature: String,
-
     /// Timestamp at which the file was added
     pub created_at: NaiveDateTime,
-
-    /// Timestamp at when this file was added
-    // TODO: can we simply use file timestamp?
-
     /// The plugin descriptor
     pub descriptors: Vec<PluginDescriptor>,
 }
@@ -53,13 +43,12 @@ impl Storage {
         // TODO: create path if not exists
         let mut database = PluginDatabase::new();
 
-        let paths = std::fs::read_dir(&root).unwrap();
+        let paths = std::fs::read_dir(&root)?;
         for path in paths.filter_map(|p| p.ok()) {
             if let Some(extension) = path.path().extension() {
                 if extension.to_str().unwrap_or_default() == "meta" {
                     let metadata: PluginMetadata =
-                        serde_json::from_str(&std::fs::read_to_string(path.path()).unwrap())
-                            .unwrap();
+                        serde_json::from_str(&std::fs::read_to_string(path.path())?)?;
                     database.insert_all(&metadata)?;
                 }
             }

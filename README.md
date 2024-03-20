@@ -48,4 +48,4 @@ cargo run --release --example sign_file assets\memflow_coredump.x86_64.dll ec-se
 
 
 $env:RUST_LOG="info"
-$env:MEMFLOW_PUBLIC_KEY="ec-secp256k1-pub-key.pem"
+$env:MEMFLOW_PUBLIC_KEY_FILE="ec-secp256k1-pub-key.pem"

@@ -7,6 +7,7 @@ pub type ResponseResult<T> = std::result::Result<T, (axum::http::StatusCode, Str
 /// Library errors
 #[derive(thiserror::Error, Debug, Clone, PartialEq)]
 pub enum Error {
+    // Basic errors
     #[error("IO error: {0}")]
     IO(String),
     #[error("Parse error: {0}")]
@@ -17,6 +18,8 @@ pub enum Error {
     AlreadyExists(String),
     #[error("Not implemented: {0}")]
     NotImplemented(String),
+
+    // External crate error forwards
     #[error("Goblin error: {0}")]
     Goblin(String),
     #[error("Signature error: {0}")]
@@ -55,6 +58,12 @@ impl From<k256::ecdsa::Error> for Error {
 
 impl From<std::num::ParseIntError> for Error {
     fn from(err: std::num::ParseIntError) -> Self {
+        Error::Parse(err.to_string())
+    }
+}
+
+impl From<serde_json::error::Error> for Error {
+    fn from(err: serde_json::error::Error) -> Self {
         Error::Parse(err.to_string())
     }
 }
