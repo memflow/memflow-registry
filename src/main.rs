@@ -9,8 +9,15 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use axum_extra::{
+    headers::{
+        authorization::{self, Bearer},
+        Authorization,
+    },
+    TypedHeader,
+};
 use bytes::BytesMut;
-use log::info;
+use log::{info, warn};
 use serde::Serialize;
 use tokio_util::io::ReaderStream;
 
@@ -24,9 +31,13 @@ use storage::{
 
 #[tokio::main]
 async fn main() {
+    // load configuration from .env file
+    dotenv::dotenv().ok();
+
+    // initialize logging
     env_logger::init();
 
-    let root = std::env::var("MEMFLOW_STORAGE_ROOT").unwrap_or_else(|_| "./.storage".into());
+    let root = std::env::var("MEMFLOW_STORAGE_ROOT").unwrap_or_else(|_| ".storage".into());
     info!("storing plugins in `{}`", root);
     let mut storage = Storage::new(&root).expect("unable to create storage handler");
 
@@ -58,8 +69,20 @@ fn app(storage: Storage) -> Router {
 
 async fn plugin_push(
     State(storage): State<Storage>,
+    TypedHeader(authorization): TypedHeader<Authorization<Bearer>>,
     mut multipart: Multipart,
 ) -> ResponseResult<()> {
+    // TODO: move to state?
+    if let Ok(token) = std::env::var("MEMFLOW_BEARER_TOKEN") {
+        if authorization.0.token() != token {
+            warn!(
+                "invalid token when uploading plugin: token={}",
+                authorization.0.token()
+            );
+            return Err((StatusCode::FORBIDDEN, "invalid token".to_owned()));
+        }
+    }
+
     let mut file_data = None;
     let mut file_signature = None;
 
@@ -111,7 +134,7 @@ async fn plugin_push(
     if let Some(data) = file_data {
         if let Some(signature) = file_signature {
             info!(
-                "adding file to registry: size={} signature={}",
+                "trying to add file to registry: size={} signature={}",
                 data.len(),
                 &signature
             );
