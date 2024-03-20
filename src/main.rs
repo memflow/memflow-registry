@@ -10,10 +10,7 @@ use axum::{
     Json, Router,
 };
 use axum_extra::{
-    headers::{
-        authorization::{self, Bearer},
-        Authorization,
-    },
+    headers::{authorization::Bearer, Authorization},
     TypedHeader,
 };
 use bytes::BytesMut;
@@ -26,7 +23,9 @@ mod storage;
 
 use error::ResponseResult;
 use storage::{
-    pki::SignatureVerifier, plugin_analyzer, PluginDatabaseFindParams, PluginEntry, Storage,
+    database::{PluginDatabaseFindParams, PluginEntry},
+    pki::SignatureVerifier,
+    plugin_analyzer, Storage,
 };
 
 #[tokio::main]
