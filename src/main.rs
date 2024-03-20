@@ -19,8 +19,7 @@ mod storage;
 
 use error::ResponseResult;
 use storage::{
-    plugin_analyzer::{self},
-    PluginDatabaseFindParams, PluginEntry, Storage,
+    pki::SignatureVerifier, plugin_analyzer, PluginDatabaseFindParams, PluginEntry, Storage,
 };
 
 #[tokio::main]
@@ -29,7 +28,14 @@ async fn main() {
 
     let root = std::env::var("MEMFLOW_STORAGE_ROOT").unwrap_or_else(|_| "./.storage".into());
     info!("storing plugins in `{}`", root);
-    let storage = Storage::new(root.into()).expect("unable to create storage handler");
+    let mut storage = Storage::new(&root).expect("unable to create storage handler");
+
+    // use public key file if specified
+    if let Ok(public_key_file) = std::env::var("MEMFLOW_PUBLIC_KEY") {
+        let signature_verifier =
+            SignatureVerifier::new(public_key_file).expect("unable to load public key file");
+        storage = storage.with_signature_verifier(signature_verifier);
+    }
 
     // build our application with a single route
     let app = app(storage);
@@ -54,37 +60,77 @@ async fn plugin_push(
     State(storage): State<Storage>,
     mut multipart: Multipart,
 ) -> ResponseResult<()> {
+    let mut file_data = None;
+    let mut file_signature = None;
+
     while let Some(mut field) = multipart
         .next_field()
         .await
         .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?
     {
-        // read the buffer
-        let mut data = BytesMut::new();
-        let mut checked = false;
-        while let Some(chunk) = field
-            .chunk()
-            .await
-            .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?
-        {
-            data.extend_from_slice(&chunk);
+        if let Some(name) = field.name() {
+            match name {
+                "signature" => {
+                    file_signature = Some(
+                        field
+                            .text()
+                            .await
+                            .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?,
+                    );
+                }
+                "file" => {
+                    // read the buffer
+                    let mut data = BytesMut::new();
+                    let mut checked = false;
+                    while let Some(chunk) = field
+                        .chunk()
+                        .await
+                        .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?
+                    {
+                        data.extend_from_slice(&chunk);
 
-            // check if this file is a potential binary or early abort
-            if !checked && data.len() > 4 {
-                plugin_analyzer::is_binary(&data[..])
-                    .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?;
-                checked = true;
+                        // check if this file is a potential binary or early abort
+                        if !checked && data.len() > 4 {
+                            plugin_analyzer::is_binary(&data[..])
+                                .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?;
+                            checked = true;
+                        }
+                    }
+                    file_data = Some(data.freeze());
+                }
+                _ => {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        "unexpected field in multipart form".to_owned(),
+                    ))
+                }
             }
         }
-        let data = data.freeze();
-
-        storage
-            .upload(&data[..])
-            .await
-            .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?;
     }
 
-    Ok(())
+    if let Some(data) = file_data {
+        if let Some(signature) = file_signature {
+            info!(
+                "adding file to registry: size={} signature={}",
+                data.len(),
+                &signature
+            );
+
+            // upload file
+            storage
+                .upload(&data[..], &signature)
+                .await
+                .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?;
+            Ok(())
+        } else {
+            Err((
+                StatusCode::BAD_REQUEST,
+                "file signature is required".to_owned(),
+            ))
+        }
+    } else {
+        Err((StatusCode::BAD_REQUEST, "file is required".to_owned()))
+    }
 }
 
 #[derive(Clone, Serialize)]

@@ -1,8 +1,9 @@
+use std::path::Path;
 use std::sync::Arc;
 use std::{cmp::Ordering, path::PathBuf};
 
 use chrono::{NaiveDateTime, Utc};
-use log::info;
+use log::{info, warn};
 use parking_lot::{lock_api::RwLockReadGuard, RawRwLock, RwLock};
 use serde::{Deserialize, Serialize};
 use tokio::fs::File;
@@ -11,9 +12,10 @@ use tokio::io::AsyncWriteExt;
 use crate::error::{Error, Result};
 
 pub mod plugin_analyzer;
-use plugin_analyzer::PluginDescriptor;
+use plugin_analyzer::{PluginArchitecture, PluginDescriptor, PluginFileType};
 
-use self::plugin_analyzer::{PluginArchitecture, PluginFileType};
+pub mod pki;
+use pki::SignatureVerifier;
 
 /// Metadata attached to each file
 #[derive(Debug, Serialize, Deserialize)]
@@ -24,6 +26,9 @@ pub struct PluginMetadata {
     // TODO: do we need more?
     /// The sha256sum of the binary file
     pub digest: String,
+
+    /// File signature of this binary
+    pub signature: String,
 
     /// Timestamp at which the file was added
     pub created_at: NaiveDateTime,
@@ -40,10 +45,11 @@ pub struct PluginMetadata {
 pub struct Storage {
     root: PathBuf,
     database: Arc<RwLock<PluginDatabase>>,
+    signature_verifier: Option<SignatureVerifier>,
 }
 
 impl Storage {
-    pub fn new(root: PathBuf) -> Result<Self> {
+    pub fn new<P: AsRef<Path>>(root: P) -> Result<Self> {
         // TODO: create path if not exists
         let mut database = PluginDatabase::new();
 
@@ -60,29 +66,53 @@ impl Storage {
         }
 
         Ok(Self {
-            root,
+            root: root.as_ref().to_path_buf(),
             database: Arc::new(RwLock::new(database)),
+            signature_verifier: None,
         })
     }
 
+    /// Adds the given SignatureVerifier to the file store.
+    pub fn with_signature_verifier(mut self, verifier: SignatureVerifier) -> Self {
+        self.signature_verifier = Some(verifier);
+        self
+    }
+
     /// Writes the specified connector into the path and adds it into the database.
-    pub async fn upload(&self, bytes: &[u8]) -> Result<()> {
+    pub async fn upload(&self, bytes: &[u8], signature: &str) -> Result<()> {
+        // TODO: what happens with old signatures in case we change the signing key?
+        if let Some(verifier) = &self.signature_verifier {
+            if let Err(err) = verifier.is_valid(bytes, signature) {
+                warn!("invalid file signature for uploaded binary: {}", err);
+                return Err(Error::Signature("file signature is invalid".to_owned()));
+            }
+        }
+
+        // parse descriptors
         let descriptors = plugin_analyzer::parse_descriptors(bytes)?;
 
-        // TODO: reuse original file extension
+        // generate sha256 digest
         let digest = sha256::digest(bytes);
 
-        // TODO: check if digest exist, so we do not add duplicate files
-
-        // write plugin
+        // plugin path: {digest}.plugin
         let mut file_name = self.root.clone().join(&digest);
         file_name.set_extension("plugin");
+
+        // check if digest is already existent
+        if file_name.exists() {
+            return Err(Error::AlreadyExists(
+                "plugin with the same digest was already added".to_owned(),
+            ));
+        }
+
+        // write plugin
         let mut plugin_file = File::create(&file_name).await?;
         plugin_file.write_all(bytes).await?;
 
-        // write metadata
+        // metadata path: {digest}.meta
         let metadata = PluginMetadata {
             digest: digest.clone(),
+            signature: signature.to_owned(),
             created_at: Utc::now().naive_utc(),
             descriptors: descriptors.clone(),
         };
@@ -130,6 +160,7 @@ pub struct PluginDatabase {
 #[derive(Clone, Serialize)]
 pub struct PluginEntry {
     digest: String,
+    signature: String,
     created_at: NaiveDateTime,
     descriptor: PluginDescriptor,
 }
@@ -166,7 +197,8 @@ impl PluginDatabase {
 
             // TODO: check for duplicate entries?
             self.plugins.push(PluginEntry {
-                digest: metadata.digest.to_owned(),
+                digest: metadata.digest.clone(),
+                signature: metadata.signature.clone(),
                 created_at: metadata.created_at,
                 descriptor: descriptor.clone(),
             });
