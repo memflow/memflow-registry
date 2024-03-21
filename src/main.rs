@@ -36,6 +36,14 @@ async fn main() {
     // initialize logging
     env_logger::init();
 
+    match std::env::var("MEMFLOW_BEARER_TOKEN") {
+        Ok(token) if token.is_empty() => {
+            warn!("authentication token is empty, THIS IS POTENTIALLY INSECURE.")
+        }
+        Err(_) => warn!("no authentication token set, THIS IS POTENTIALLY INSECURE."),
+        _ => (),
+    }
+
     let root = std::env::var("MEMFLOW_STORAGE_ROOT").unwrap_or_else(|_| ".storage".into());
     info!("storing plugins in `{}`", root);
     let mut storage = Storage::new(&root).expect("unable to create storage handler");
@@ -45,6 +53,8 @@ async fn main() {
         let signature_verifier =
             SignatureVerifier::new(public_key_file).expect("unable to load public key file");
         storage = storage.with_signature_verifier(signature_verifier);
+    } else {
+        warn!("public key file not set, THIS IS POTENTIALLY INSECURE.");
     }
 
     // build our application with a single route
