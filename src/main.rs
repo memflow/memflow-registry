@@ -23,7 +23,7 @@ mod storage;
 
 use error::ResponseResult;
 use storage::{
-    database::{PluginDatabaseFindParams, PluginEntry},
+    database::{PluginDatabaseFindParams, PluginEntry, PluginName},
     pki::SignatureVerifier,
     plugin_analyzer, Storage,
 };
@@ -69,19 +69,57 @@ async fn main() {
 
 fn app(storage: Storage) -> Router {
     Router::new()
-        .route("/", post(plugin_push))
-        .route("/find", get(plugin_find))
-        .route("/:digest", get(plugin_pull))
+        .route("/plugins", get(get_plugins))
+        .route("/plugins/:plugin_name", get(find_plugin_variants))
+        .route("/files/", post(upload_file))
+        .route("/files/:digest", get(find_file_by_digest))
         .layer(DefaultBodyLimit::max(20 * 1024 * 1024)) // 20 mb
         .with_state(storage)
 }
 
-async fn plugin_push(
+#[derive(Clone, Serialize)]
+struct PluginsAllResponse {
+    plugins: Vec<PluginName>,
+}
+
+/// Returns a list of all available plugins
+async fn get_plugins(State(storage): State<Storage>) -> ResponseResult<Json<PluginsAllResponse>> {
+    let plugins = storage.database().plugins();
+    Ok(PluginsAllResponse { plugins }.into())
+}
+
+#[derive(Clone, Serialize)]
+struct PluginsFindResponse {
+    plugins: Vec<PluginEntry>,
+    skip: usize,
+}
+
+/// Returns a list of plugins based on the given filter parameters
+async fn find_plugin_variants(
+    State(storage): State<Storage>,
+    params: Query<PluginDatabaseFindParams>,
+    Path(plugin_name): Path<String>,
+) -> ResponseResult<Json<PluginsFindResponse>> {
+    // find entries in database
+    let params: PluginDatabaseFindParams = params.0;
+    let entries = storage
+        .database()
+        .plugin_variants(&plugin_name, params.clone());
+
+    Ok(PluginsFindResponse {
+        plugins: entries,
+        skip: params.skip.unwrap_or(0),
+    }
+    .into())
+}
+
+/// Posts a file to the backend and analyzes it.
+async fn upload_file(
     State(storage): State<Storage>,
     TypedHeader(authorization): TypedHeader<Authorization<Bearer>>,
     mut multipart: Multipart,
 ) -> ResponseResult<()> {
-    // TODO: move to state?
+    // TODO: move to state? + move to middleware
     if let Ok(token) = std::env::var("MEMFLOW_BEARER_TOKEN") {
         if authorization.0.token() != token {
             warn!(
@@ -165,29 +203,8 @@ async fn plugin_push(
     }
 }
 
-#[derive(Clone, Serialize)]
-struct PluginListResponse {
-    plugins: Vec<PluginEntry>,
-    skip: usize,
-}
-
-async fn plugin_find(
-    State(storage): State<Storage>,
-    params: Query<PluginDatabaseFindParams>,
-) -> ResponseResult<Json<PluginListResponse>> {
-    let params: PluginDatabaseFindParams = params.0;
-
-    // find entries in database
-    let entries = storage.database().find(params.clone());
-
-    Ok(PluginListResponse {
-        plugins: entries,
-        skip: params.skip.unwrap_or(0),
-    }
-    .into())
-}
-
-async fn plugin_pull(
+/// Retrieves a file by it's digest.
+async fn find_file_by_digest(
     State(storage): State<Storage>,
     Path(digest): Path<String>,
 ) -> ResponseResult<impl IntoResponse> {

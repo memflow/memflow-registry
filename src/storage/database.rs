@@ -23,9 +23,14 @@ pub struct PluginEntry {
     pub descriptor: PluginDescriptor,
 }
 
+#[derive(Clone, Serialize)]
+pub struct PluginName {
+    name: String,
+    description: String,
+}
+
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct PluginDatabaseFindParams {
-    pub name: Option<String>,
     pub version: Option<String>,
     pub memflow_plugin_version: Option<i32>,
     pub file_type: Option<PluginFileType>,
@@ -72,17 +77,38 @@ impl PluginDatabase {
         Ok(())
     }
 
-    pub fn find(&self, params: PluginDatabaseFindParams) -> Vec<PluginEntry> {
+    /// Returns a list of all plugin names and their descriptions.
+    pub fn plugins(&self) -> Vec<PluginName> {
+        let mut plugins = self
+            .plugins
+            .iter()
+            .map(|entry| PluginName {
+                name: entry.descriptor.name.clone(),
+                description: entry.descriptor.description.clone(),
+            })
+            .collect::<Vec<_>>();
+        plugins.sort_by(|a, b| a.name.cmp(&b.name));
+        plugins.dedup_by(|a, b| a.name == b.name);
+        plugins
+    }
+
+    /// Retrieves a specific digest
+    pub fn find_by_digest(&self, digest: &str) -> Option<PluginEntry> {
+        self.plugins.iter().find(|p| p.digest == digest).cloned()
+    }
+
+    /// Retrieves a list of variants for a specific plugin.
+    /// Additional search parameters can be specified.
+    pub fn plugin_variants(
+        &self,
+        plugin_name: &str,
+        params: PluginDatabaseFindParams,
+    ) -> Vec<PluginEntry> {
         self.plugins
             .iter()
             .skip(params.skip.unwrap_or(0))
+            .filter(|p| p.descriptor.name == plugin_name)
             .filter(|p| {
-                if let Some(name) = &params.name {
-                    if *name != p.descriptor.name {
-                        return false;
-                    }
-                }
-
                 if let Some(version) = &params.version {
                     if *version != p.descriptor.version {
                         return false;

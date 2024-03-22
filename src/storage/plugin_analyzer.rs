@@ -59,6 +59,7 @@ const _: [(); std::mem::size_of::<PluginDescriptor64>()] = [(); 0x60];
 unsafe impl Pod for PluginDescriptor64 {}
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
 pub enum PluginArchitecture {
     Unknown(u32),
     X86,
@@ -68,6 +69,7 @@ pub enum PluginArchitecture {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
 pub enum PluginFileType {
     Pe,
     Elf,

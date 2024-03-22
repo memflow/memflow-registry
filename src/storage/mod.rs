@@ -15,7 +15,7 @@ pub mod plugin_analyzer;
 use plugin_analyzer::PluginDescriptor;
 
 pub mod database;
-use database::{PluginDatabase, PluginDatabaseFindParams};
+use database::PluginDatabase;
 
 pub mod pki;
 use pki::SignatureVerifier;
@@ -124,14 +124,9 @@ impl Storage {
     pub async fn download(&self, digest: &str) -> Result<File> {
         let plugin_info = {
             let lock = self.database.read();
-            lock.find(PluginDatabaseFindParams {
-                digest: Some(digest.to_owned()),
-                limit: Some(1),
-                ..Default::default()
-            })
-            .first()
-            .ok_or_else(|| Error::NotFound("plugin not found".to_owned()))?
-            .to_owned()
+            lock.find_by_digest(digest)
+                .ok_or_else(|| Error::NotFound("plugin not found".to_owned()))?
+                .to_owned()
         };
 
         let mut file_name = self.root.clone().join(&plugin_info.digest);
