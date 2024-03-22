@@ -1,4 +1,4 @@
-use std::cmp::Ordering;
+use std::collections::HashMap;
 
 use chrono::NaiveDateTime;
 use log::info;
@@ -11,8 +11,11 @@ use super::{
     PluginMetadata,
 };
 
+const DEFAULT_PLUGIN_VARIANTS: usize = 5;
+const MAX_PLUGIN_VARIANTS: usize = 50;
+
 pub struct PluginDatabase {
-    plugins: Vec<PluginEntry>,
+    plugins: HashMap<String, Vec<PluginEntry>>,
 }
 
 #[derive(Clone, Serialize)]
@@ -46,7 +49,7 @@ pub struct PluginDatabaseFindParams {
 impl PluginDatabase {
     pub fn new() -> Self {
         Self {
-            plugins: Vec::new(),
+            plugins: HashMap::new(),
         }
     }
 
@@ -58,21 +61,22 @@ impl PluginDatabase {
                 metadata.digest, metadata.created_at, descriptor
             );
 
-            // TODO: check for duplicate entries?
-            self.plugins.push(PluginEntry {
-                digest: metadata.digest.clone(),
-                signature: metadata.signature.clone(),
-                created_at: metadata.created_at,
-                descriptor: descriptor.clone(),
-            });
-        }
+            let entry = self.plugins.entry(descriptor.name.clone()).or_default();
 
-        // sort plugins by created_at timestamp to show the newest ones first
-        self.plugins.sort_by(|a, b| {
-            b.created_at
-                .partial_cmp(&a.created_at)
-                .unwrap_or(Ordering::Equal)
-        });
+            // sort plugins by created_at timestamp to show the newest ones first
+            match entry.binary_search_by(|entry| entry.created_at.cmp(&metadata.created_at)) {
+                Ok(_) => unreachable!(), // element already in vector @ `pos` // TODO: check for duplicate entries
+                Err(pos) => entry.insert(
+                    pos,
+                    PluginEntry {
+                        digest: metadata.digest.clone(),
+                        signature: metadata.signature.clone(),
+                        created_at: metadata.created_at,
+                        descriptor: descriptor.clone(),
+                    },
+                ),
+            }
+        }
 
         Ok(())
     }
@@ -82,9 +86,11 @@ impl PluginDatabase {
         let mut plugins = self
             .plugins
             .iter()
-            .map(|entry| PluginName {
-                name: entry.descriptor.name.clone(),
-                description: entry.descriptor.description.clone(),
+            .flat_map(|(key, variants)| {
+                variants.iter().map(|variant| PluginName {
+                    name: key.to_owned(),
+                    description: variant.descriptor.description.clone(),
+                })
             })
             .collect::<Vec<_>>();
         plugins.sort_by(|a, b| a.name.cmp(&b.name));
@@ -94,7 +100,10 @@ impl PluginDatabase {
 
     /// Retrieves a specific digest
     pub fn find_by_digest(&self, digest: &str) -> Option<PluginEntry> {
-        self.plugins.iter().find(|p| p.digest == digest).cloned()
+        self.plugins
+            .iter()
+            .find_map(|(_, variants)| variants.iter().find(|variant| variant.digest == digest))
+            .cloned()
     }
 
     /// Retrieves a list of variants for a specific plugin.
@@ -105,50 +114,60 @@ impl PluginDatabase {
         params: PluginDatabaseFindParams,
     ) -> Vec<PluginEntry> {
         self.plugins
-            .iter()
-            .skip(params.skip.unwrap_or(0))
-            .filter(|p| p.descriptor.name == plugin_name)
-            .filter(|p| {
-                if let Some(version) = &params.version {
-                    if *version != p.descriptor.version {
-                        return false;
-                    }
-                }
+            .get(plugin_name)
+            .map(|variants| {
+                variants
+                    .iter()
+                    .skip(params.skip.unwrap_or(0))
+                    .filter(|p| p.descriptor.name == plugin_name)
+                    .filter(|p| {
+                        if let Some(version) = &params.version {
+                            if *version != p.descriptor.version {
+                                return false;
+                            }
+                        }
 
-                if let Some(memflow_plugin_version) = params.memflow_plugin_version {
-                    if memflow_plugin_version != p.descriptor.plugin_version {
-                        return false;
-                    }
-                }
+                        if let Some(memflow_plugin_version) = params.memflow_plugin_version {
+                            if memflow_plugin_version != p.descriptor.plugin_version {
+                                return false;
+                            }
+                        }
 
-                if let Some(file_type) = params.file_type {
-                    if file_type != p.descriptor.file_type {
-                        return false;
-                    }
-                }
+                        if let Some(file_type) = params.file_type {
+                            if file_type != p.descriptor.file_type {
+                                return false;
+                            }
+                        }
 
-                if let Some(architecture) = params.architecture {
-                    if architecture != p.descriptor.architecture {
-                        return false;
-                    }
-                }
+                        if let Some(architecture) = params.architecture {
+                            if architecture != p.descriptor.architecture {
+                                return false;
+                            }
+                        }
 
-                if let Some(digest) = &params.digest {
-                    if *digest != p.digest {
-                        return false;
-                    }
-                }
+                        if let Some(digest) = &params.digest {
+                            if *digest != p.digest {
+                                return false;
+                            }
+                        }
 
-                if let Some(digest_short) = &params.digest_short {
-                    if *digest_short != p.digest[..7] {
-                        return false;
-                    }
-                }
+                        if let Some(digest_short) = &params.digest_short {
+                            if *digest_short != p.digest[..7] {
+                                return false;
+                            }
+                        }
 
-                true
+                        true
+                    })
+                    .take(
+                        params
+                            .limit
+                            .unwrap_or(DEFAULT_PLUGIN_VARIANTS)
+                            .min(MAX_PLUGIN_VARIANTS),
+                    )
+                    .cloned()
+                    .collect::<Vec<_>>()
             })
-            .take(params.limit.unwrap_or(50).min(50))
-            .cloned()
-            .collect::<Vec<_>>()
+            .unwrap_or_default()
     }
 }
