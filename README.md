@@ -4,6 +4,8 @@ Docker-style registry to store memflow plugin artifacts.
 
 The memflow-registry project aims to provide a centralized solution for managing memflow binary plugins. This server facilitates the distribution and updating of memflow plugins, ensuring that users can easily access the appropriate plugin versions for their memflow version.
 
+All plugins in the official registry are cryptographically signed and verified at the time memflowup or memflow downloads them.
+
 ## Features
 
 - Artifact Management: Users can download and explore existing plugins.
@@ -54,50 +56,102 @@ $ openssl ec -in ec-secp256k1-priv-key.pem -pubout > ec-secp256k1-pub-key.pem
 
 ## Deploying your own instance
 
-## Testing via cURL / OpenAPI
+### Persistence
+### Scaling
+### Roadmap
 
-...
+## Testing via cURL
 
-## Usage:
+### Uploading a plugin artifact
 
-### Uploading a plugin:
-```
-curl -F 'file=@.storage.bak/libmemflow_coredump.aarch64.so' http://localhost:3000/
-curl -F 'file=@.storage.bak/libmemflow_coredump.aarch64.so' http://$(hostname).local:3000/
+As a first step you might want to upload a plugin. For example you can upload one of the provided sample binaries in the `assets` folder:
+```bash
+# Generate the file signature:
+$ openssl dgst -sha256 -hex -sign ec-secp256k1-priv-key.pem assets/libmemflow_coredump.aarch64.so
+EC-SHA256(assets/libmemflow_coredump.aarch64.so)= 304402200e45acb16e3f01b6f2f04df06eab1a40f8da90cfaa49a8ad987d013a41c7e647022065ff4ab45e543e5c068e4398c0703cf3142ffa6aee31892672dc6937f624e10a
 
-$ compute signature:
-openssl dgst -sha256 -hex -sign ../ec-secp256k1-priv-key.pem libmemflow_coredump.aarch64.so
+# Set the file signature:
+$ export SIGNATURE="304402200e45acb16e3f01b6f2f04df06eab1a40f8da90cfaa49a8ad987d013a41c7e647022065ff4ab45e543e5c068e4398c0703cf3142ffa6aee31892672dc6937f624e10a"
 
-$ upload with signature:
-curl -F 'file=@libmemflow_coredump.aarch64.so' -F "signature=$(openssl dgst -sha256 -hex -sign ../ec-secp256k1-priv-key.pem libmemflow_coredump.aarch64.so | cut -d' ' -f2)" http://$(hostname).local:3000/
-
-$ upload all files from folder:
-for i in *; do curl -F "file=@$i" http://localhost:3000/; done
-
-$ upload all files with signatures
-for i in *; do curl -F "file=@$i" -F "signature=$(openssl dgst -sha256 -hex -sign ../ec-secp256k1-priv-key.pem $i | cut -d' ' -f2)" http://localhost:3000/files; done
-
-$ list all available plugins
-curl -v http://$(hostname).local:3000/plugins| jq
-
-$ list specific artifacts
-curl -v http://$(hostname).local:3000/plugins/coredump\?memflow_plugin_version\=1 | jq
-
-curl -v http://$(hostname).local:3000/aa8067150b14bee6ee9d4edb0d51472601531437da43cfbc672ddded43641b5d --output file.dll
+# Run curl with the appropriate Bearer Token and file signature:
+$ curl -H "Authorization: Bearer 1234" -F 'file=@assets/libmemflow_coredump.aarch64.so' -F "signature=$SIGNATURE" http://localhost:3000/files
 ```
 
-https://crates.io/crates/openapi-tui
-
-Generate a signing keypair:
-```
-openssl ecparam -name secp256k1 -genkey | openssl pkcs8 -topk8 -nocrypt -out ec-secp256k1-priv-key.pem
-openssl ec -in ec-secp256k1-priv-key.pem -pubout > ec-secp256k1-pub-key.pem
+To sign and upload all binaries in a folder you can call the above function for all files:
+```bash
+$ cd assets
+$ for i in *; do curl -F "file=@$i" -F "signature=$(openssl dgst -sha256 -hex -sign ../ec-secp256k1-priv-key.pem $i | cut -d' ' -f2)" http://localhost:3000/files; done
 ```
 
-Sign a connector with the newly generated private key:
+### Query all available plugins
+
+```bash
+$ curl -v http://localhost:3000/plugins
 ```
-cargo run --release --example sign_file assets\memflow_coredump.x86_64.dll ec-secp256k1-priv-key.pem
+```json
+{
+  "plugins": [
+    {
+      "name": "coredump",
+      "description": "win32 coredump connector for the memflow physical memory introspection framework"
+    }
+  ]
+}
 ```
+
+### Find specific plugin variants
+
+```bash
+$ curl -v http://localhost:3000/plugins/coredump\?memflow_plugin_version\=1\&file_type\=pe\&architecture\=x86_64
+```
+```json
+{
+  "plugins": [
+    {
+      "digest": "880e0e255146016e820a5890137599936232ea9bf26053697541f2c579921065",
+      "signature": "30440220240ee8af828d459358882eabb7dbb0405a03c2f7bedd9504ec32190267ce9b27022057bdcef318eb0616fc030d028d4d6a1a802f4e6b95567e66a290380e2702f78d",
+      "created_at": "2024-03-22T18:14:53.402258600",
+      "descriptor": {
+        "file_type": "pe",
+        "architecture": "x86_64",
+        "plugin_version": 1,
+        "name": "coredump",
+        "version": "0.2.0",
+        "description": "win32 coredump connector for the memflow physical memory introspection framework"
+      }
+    }
+  ],
+  "skip": 0
+}
+```
+
+All filtering is optional. The following filters are currently available:
+- version - specific plugin version, think of it like a version tag
+- memflow_plugin_version - the memflow abi version
+- file_type - either pe, elf or mach
+- architecture - either x86, x86_64, arm or arm64
+- digest - sha256 digest of the plugin binary
+- digest_short - sha256 of the plugin binary but cropped to 7 digits
+
+Additionally this api supports pagination by providing the following parameters:
+- skip - skip the first `skip` elements
+- limit - only show `limit` items
+
+All plugins are sorted by upload date. So the latest version of a specific variant is always the first one in the list.
+
+### Download a plugin
+
+```bash
+$ curl -v http://localhost:3000/files/880e0e255146016e820a5890137599936232ea9bf26053697541f2c579921065 --output file.dll
+```
+
+### Delete a plugin binary
+
+```bash
+$ curl -v -X DELETE -H "Authorization: Bearer 1234" http://localhost:3000/files/880e0e255146016e820a5890137599936232ea9bf26053697541f2c579921065
+```
+
+Since a plugin binary can contain multiple plugins this call ensures all plugin variants are removed from the database.
 
 ## Contributing
 
