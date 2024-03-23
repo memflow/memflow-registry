@@ -1,0 +1,13 @@
+name: Deployment
+
+on: [push, pull_request]
+
+jobs:
+
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t ko1n/memflow-registry:latest .
+      - run: docker login -u ko1n -p ${DOCKER_HUB_TOKEN}
+      - run: docker push ko1n/memflow-registry:latest

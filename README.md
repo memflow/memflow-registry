@@ -48,7 +48,7 @@ MEMFLOW_BEARER_TOKEN=token
 In case you are using the default example configuration you also have to create the `.storage` directory first.
 
 If you want to enable and test the file signature verification you have to generate a public-private key-pair that is being used in the upload and verification process.
-The keys have to be an ecdsa p256k1 key in pkcs8 format. You can generate the keypair via:
+The keys have to be an ecdsa p256k1 key in pkcs8 format. You can generate the key-pair via:
 ```bash
 $ openssl ecparam -name secp256k1 -genkey | openssl pkcs8 -topk8 -nocrypt -out ec-secp256k1-priv-key.pem
 $ openssl ec -in ec-secp256k1-priv-key.pem -pubout > ec-secp256k1-pub-key.pem
@@ -62,11 +62,11 @@ Official pre-built images are available in the docker registry [here](https://hu
 
 The image can be configured via environment variables. For a full list of all available variables take a look at the [.env.example](.env.example) file. To get started, you will most likely just want to override the `MEMFLOW_PUBLIC_KEY_FILE` and `MEMFLOW_BEARER_TOKEN` variables.
 
-The image is also configured to store all artifacts in `/var/lib/memflow-registry/data/mfdata`. To persistent them across restarts just create a volume binding for the folder.
+The image is also configured to store all artifacts in `/var/lib/memflow-registry/data/mfdata`. To ensure the database survives containers restart create a volume binding for the folder.
 
 ### Scalability
 
-Currently the image does not support horizontal scaling. Please ensure to only allow one instance to access the storage volume.
+Currently, the image does not support horizontal scaling. Please ensure to only allow one instance to access the storage volume.
 
 ## Testing via cURL
 
@@ -141,7 +141,7 @@ All filtering is optional. The following filters are currently available:
 - digest - sha256 digest of the plugin binary
 - digest_short - sha256 of the plugin binary but cropped to 7 digits
 
-Additionally this api supports pagination by providing the following parameters:
+Additionally, this api supports pagination by providing the following parameters:
 - skip - skip the first `skip` elements
 - limit - only show `limit` items
 
@@ -159,12 +159,13 @@ $ curl -v http://localhost:3000/files/880e0e255146016e820a5890137599936232ea9bf2
 $ curl -v -X DELETE -H "Authorization: Bearer token" http://localhost:3000/files/880e0e255146016e820a5890137599936232ea9bf26053697541f2c579921065
 ```
 
-Since a plugin binary can contain multiple plugins this call ensures all plugin variants are removed from the database.
+Since a plugin binary can contain multiple plugins, this call ensures all plugin variants are removed from the database.
 
 ## Roadmap
 
 - Add pull-through capabilities to registry so end-users can setup their own registries more easily
 - Add support for multiple signing keys
+- Web UI for browsing the plugin database
 
 ## Contributing
 
