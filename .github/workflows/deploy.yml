@@ -6,6 +6,7 @@ jobs:
 
   publish:
     runs-on: ubuntu-latest
+    environment: publish
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t ko1n/memflow-registry:latest .

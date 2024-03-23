@@ -62,7 +62,7 @@ Official pre-built images are available in the docker registry [here](https://hu
 
 The image can be configured via environment variables. For a full list of all available variables take a look at the [.env.example](.env.example) file. To get started, you will most likely just want to override the `MEMFLOW_PUBLIC_KEY_FILE` and `MEMFLOW_BEARER_TOKEN` variables.
 
-The image is also configured to store all artifacts in `/var/lib/memflow-registry/data/mfdata`. To ensure the database survives containers restart create a volume binding for the folder.
+The image is also configured to store all artifacts in `/var/lib/memflow-registry/data/mfdata`. To ensure the database survives container restarts, create a volume binding for the folder.
 
 ### Scalability
 
