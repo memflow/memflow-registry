@@ -1,11 +1,12 @@
 use axum::{
     body::Body,
-    extract::{DefaultBodyLimit, Multipart, Path, Query, State},
+    extract::{DefaultBodyLimit, Multipart, Path, Query, Request, State},
     http::{
         header::{CONTENT_LENGTH, CONTENT_TYPE},
         HeaderValue, StatusCode,
     },
-    response::IntoResponse,
+    middleware::{self, Next},
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -68,13 +69,51 @@ async fn main() {
 }
 
 fn app(storage: Storage) -> Router {
-    Router::new()
+    let auth_token = AuthorizationToken {
+        token: std::env::var("MEMFLOW_BEARER_TOKEN").ok(),
+    };
+    let authed_routes = Router::new()
+        .route("/files/", post(upload_file))
+        .layer(DefaultBodyLimit::max(20 * 1024 * 1024)) // 20 mb
+        .route_layer(middleware::from_fn_with_state(
+            auth_token.clone(),
+            check_token,
+        ))
+        .with_state(storage.clone());
+
+    let public_routes = Router::new()
         .route("/plugins", get(get_plugins))
         .route("/plugins/:plugin_name", get(find_plugin_variants))
-        .route("/files/", post(upload_file))
         .route("/files/:digest", get(find_file_by_digest))
-        .layer(DefaultBodyLimit::max(20 * 1024 * 1024)) // 20 mb
-        .with_state(storage)
+        .with_state(storage);
+
+    Router::new().merge(public_routes).merge(authed_routes)
+}
+
+#[derive(Clone)]
+struct AuthorizationToken {
+    token: Option<String>,
+}
+
+async fn check_token(
+    State(auth_token): State<AuthorizationToken>,
+    TypedHeader(authorization): TypedHeader<Authorization<Bearer>>,
+    request: Request,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    if let Some(token) = auth_token.token {
+        if authorization.0.token() != token {
+            // token is set but it does not match
+            warn!(
+                "invalid token when uploading plugin: token={}",
+                authorization.0.token()
+            );
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+    }
+
+    let response = next.run(request).await;
+    Ok(response)
 }
 
 #[derive(Clone, Serialize)]
@@ -116,20 +155,8 @@ async fn find_plugin_variants(
 /// Posts a file to the backend and analyzes it.
 async fn upload_file(
     State(storage): State<Storage>,
-    TypedHeader(authorization): TypedHeader<Authorization<Bearer>>,
     mut multipart: Multipart,
 ) -> ResponseResult<()> {
-    // TODO: move to state? + move to middleware
-    if let Ok(token) = std::env::var("MEMFLOW_BEARER_TOKEN") {
-        if authorization.0.token() != token {
-            warn!(
-                "invalid token when uploading plugin: token={}",
-                authorization.0.token()
-            );
-            return Err((StatusCode::FORBIDDEN, "invalid token".to_owned()));
-        }
-    }
-
     let mut file_data = None;
     let mut file_signature = None;
 
