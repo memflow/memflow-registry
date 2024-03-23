@@ -16,7 +16,7 @@ All plugins in the official registry are cryptographically signed and verified a
 
 - Ease of Distribution: Simplifies the process of installing and updating memflow plugins across different environments.
 
-- Security: Plugins can be cryptographically signed before the upload and validated on the client that is downloading the plugin.
+- Security: Plugins are cryptographically signed before uploading and validated on the client by the end-user.
 
 ## Getting started
 
@@ -152,6 +152,11 @@ $ curl -v -X DELETE -H "Authorization: Bearer 1234" http://localhost:3000/files/
 ```
 
 Since a plugin binary can contain multiple plugins this call ensures all plugin variants are removed from the database.
+
+## Roadmap
+
+- Add pull-through capabilities to registry so end-users can setup their own registries more easily
+- Add support for multiple signing keys
 
 ## Contributing
 
