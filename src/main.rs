@@ -7,7 +7,7 @@ use axum::{
     },
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{delete, get, post},
     Json, Router,
 };
 use axum_extra::{
@@ -74,6 +74,7 @@ fn app(storage: Storage) -> Router {
     };
     let authed_routes = Router::new()
         .route("/files", post(upload_file))
+        .route("/files/:digest", delete(delete_file_by_digest))
         .layer(DefaultBodyLimit::max(20 * 1024 * 1024)) // 20 mb
         .route_layer(middleware::from_fn_with_state(
             auth_token.clone(),
@@ -258,6 +259,22 @@ async fn find_file_by_digest(
     );
 
     Ok(response)
+}
+
+/// Deletes the file with the given digest.
+async fn delete_file_by_digest(
+    State(storage): State<Storage>,
+    Path(digest): Path<String>,
+) -> ResponseResult<()> {
+    // try to delete the file by its digest
+    storage.delete(&digest).await.map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "digest could not be deleted".to_owned(),
+        )
+    })?;
+
+    Ok(())
 }
 
 #[cfg(test)]

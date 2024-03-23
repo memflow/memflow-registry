@@ -99,11 +99,19 @@ impl PluginDatabase {
     }
 
     /// Retrieves a specific digest
+    #[allow(unused)]
     pub fn find_by_digest(&self, digest: &str) -> Option<PluginEntry> {
         self.plugins
             .iter()
             .find_map(|(_, variants)| variants.iter().find(|variant| variant.digest == digest))
             .cloned()
+    }
+
+    /// Removes all entries with the specified digest from the database
+    pub fn delete_by_digest(&mut self, digest: &str) {
+        for plugin in self.plugins.iter_mut() {
+            plugin.1.retain(|variant| variant.digest != digest);
+        }
     }
 
     /// Retrieves a list of variants for a specific plugin.

@@ -122,16 +122,30 @@ impl Storage {
     }
 
     pub async fn download(&self, digest: &str) -> Result<File> {
-        let plugin_info = {
-            let lock = self.database.read();
-            lock.find_by_digest(digest)
-                .ok_or_else(|| Error::NotFound("plugin not found".to_owned()))?
-                .to_owned()
-        };
-
-        let mut file_name = self.root.clone().join(&plugin_info.digest);
+        let mut file_name = self.root.clone().join(digest);
         file_name.set_extension("plugin");
         Ok(File::open(&file_name).await?)
+    }
+
+    /// Deletes the file with the given digest from the database.
+    pub async fn delete(&self, digest: &str) -> Result<()> {
+        // check if file exists
+        let mut file_name = self.root.clone().join(digest);
+        file_name.set_extension("plugin");
+        if !file_name.exists() {
+            return Err(Error::NotFound("digest was not found".to_owned()));
+        }
+
+        // lock and remove from database
+        {
+            let mut database = self.database.write();
+            database.delete_by_digest(digest);
+        }
+
+        // try to remove the file
+        tokio::fs::remove_file(file_name).await?;
+
+        Ok(())
     }
 
     #[inline]
