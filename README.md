@@ -42,7 +42,7 @@ MEMFLOW_STORAGE_ROOT=.storage
 #MEMFLOW_PUBLIC_KEY_FILE=ec-secp256k1-pub-key.pem
 
 # Enable and set the bearer token which is required to upload and delete artifacts
-MEMFLOW_BEARER_TOKEN=1234
+MEMFLOW_BEARER_TOKEN=token
 ```
 
 In case you are using the default example configuration you also have to create the `.storage` directory first.
@@ -56,9 +56,17 @@ $ openssl ec -in ec-secp256k1-priv-key.pem -pubout > ec-secp256k1-pub-key.pem
 
 ## Deploying your own instance
 
-### Persistence
-### Scaling
-### Roadmap
+Official pre-built images are available in the docker registry [here](https://hub.docker.com/r/ko1n/memflow-registry).
+
+### Configuration / Persistence
+
+The image can be configured via environment variables. For a full list of all available variables take a look at the [.env.example](.env.example) file. To get started, you will most likely just want to override the `MEMFLOW_PUBLIC_KEY_FILE` and `MEMFLOW_BEARER_TOKEN` variables.
+
+The image is also configured to store all artifacts in `/var/lib/memflow-registry/data/mfdata`. To persistent them across restarts just create a volume binding for the folder.
+
+### Scalability
+
+Currently the image does not support horizontal scaling. Please ensure to only allow one instance to access the storage volume.
 
 ## Testing via cURL
 
@@ -74,7 +82,7 @@ EC-SHA256(assets/libmemflow_coredump.aarch64.so)= 304402200e45acb16e3f01b6f2f04d
 $ export SIGNATURE="304402200e45acb16e3f01b6f2f04df06eab1a40f8da90cfaa49a8ad987d013a41c7e647022065ff4ab45e543e5c068e4398c0703cf3142ffa6aee31892672dc6937f624e10a"
 
 # Run curl with the appropriate Bearer Token and file signature:
-$ curl -H "Authorization: Bearer 1234" -F 'file=@assets/libmemflow_coredump.aarch64.so' -F "signature=$SIGNATURE" http://localhost:3000/files
+$ curl -H "Authorization: Bearer token" -F 'file=@assets/libmemflow_coredump.aarch64.so' -F "signature=$SIGNATURE" http://localhost:3000/files
 ```
 
 To sign and upload all binaries in a folder you can call the above function for all files:
@@ -148,7 +156,7 @@ $ curl -v http://localhost:3000/files/880e0e255146016e820a5890137599936232ea9bf2
 ### Delete a plugin binary
 
 ```bash
-$ curl -v -X DELETE -H "Authorization: Bearer 1234" http://localhost:3000/files/880e0e255146016e820a5890137599936232ea9bf26053697541f2c579921065
+$ curl -v -X DELETE -H "Authorization: Bearer token" http://localhost:3000/files/880e0e255146016e820a5890137599936232ea9bf26053697541f2c579921065
 ```
 
 Since a plugin binary can contain multiple plugins this call ensures all plugin variants are removed from the database.
