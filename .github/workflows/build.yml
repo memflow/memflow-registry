@@ -14,8 +14,7 @@ jobs:
         os: [macos-latest, ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
-      - name: Build
-        run: cargo build --verbose
+      - run: cargo build --verbose
 
   build-aarch64:
     runs-on: ubuntu-latest
@@ -38,8 +37,7 @@ jobs:
         os: [macos-latest, ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
-      - name: Run all tests
-        run: cargo test --verbose
+      - run: cargo test --verbose
 
   lint:
     runs-on: ubuntu-latest
@@ -50,8 +48,7 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
       - run: rustup component add clippy
-      - name: Check formatting
-        run: cargo fmt -- --check
+      - run: cargo fmt -- --check
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
