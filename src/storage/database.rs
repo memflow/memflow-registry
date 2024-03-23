@@ -64,7 +64,7 @@ impl PluginDatabase {
             let entry = self.plugins.entry(descriptor.name.clone()).or_default();
 
             // sort plugins by created_at timestamp to show the newest ones first
-            match entry.binary_search_by(|entry| entry.created_at.cmp(&metadata.created_at)) {
+            match entry.binary_search_by(|entry| metadata.created_at.cmp(&entry.created_at)) {
                 Ok(_) => unreachable!(), // element already in vector @ `pos` // TODO: check for duplicate entries
                 Err(pos) => entry.insert(
                     pos,

@@ -73,7 +73,7 @@ fn app(storage: Storage) -> Router {
         token: std::env::var("MEMFLOW_BEARER_TOKEN").ok(),
     };
     let authed_routes = Router::new()
-        .route("/files/", post(upload_file))
+        .route("/files", post(upload_file))
         .layer(DefaultBodyLimit::max(20 * 1024 * 1024)) // 20 mb
         .route_layer(middleware::from_fn_with_state(
             auth_token.clone(),
