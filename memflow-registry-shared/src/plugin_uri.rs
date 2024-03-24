@@ -102,7 +102,7 @@ pub mod tests {
     #[test]
     pub fn plugin_path_with_registry() {
         let path: PluginUri = "registry.memflow.xyz/coredump:0.2.0".parse().unwrap();
-        assert_eq!(path.registry(), "registry.memflow.xyz");
+        assert_eq!(path.registry(), "https://registry.memflow.xyz");
         assert_eq!(path.name(), "coredump");
         assert_eq!(path.version(), "0.2.0");
     }
