@@ -1,35 +1,19 @@
 use std::collections::HashMap;
 
-use chrono::NaiveDateTime;
 use log::info;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
-use crate::error::Result;
-
-use super::{
-    plugin_analyzer::{PluginArchitecture, PluginDescriptor, PluginFileType},
-    PluginMetadata,
+use memflow_registry_shared::{
+    PluginArchitecture, PluginFileType, PluginInfo, PluginVariant, Result,
 };
+
+use super::PluginMetadata;
 
 const DEFAULT_PLUGIN_VARIANTS: usize = 5;
 const MAX_PLUGIN_VARIANTS: usize = 50;
 
 pub struct PluginDatabase {
-    plugins: HashMap<String, Vec<PluginEntry>>,
-}
-
-#[derive(Clone, Serialize)]
-pub struct PluginEntry {
-    pub digest: String,
-    pub signature: String,
-    pub created_at: NaiveDateTime,
-    pub descriptor: PluginDescriptor,
-}
-
-#[derive(Clone, Serialize)]
-pub struct PluginName {
-    name: String,
-    description: String,
+    plugins: HashMap<String, Vec<PluginVariant>>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]
@@ -68,7 +52,7 @@ impl PluginDatabase {
                 Ok(_) => unreachable!(), // element already in vector @ `pos` // TODO: check for duplicate entries
                 Err(pos) => entry.insert(
                     pos,
-                    PluginEntry {
+                    PluginVariant {
                         digest: metadata.digest.clone(),
                         signature: metadata.signature.clone(),
                         created_at: metadata.created_at,
@@ -82,12 +66,12 @@ impl PluginDatabase {
     }
 
     /// Returns a list of all plugin names and their descriptions.
-    pub fn plugins(&self) -> Vec<PluginName> {
+    pub fn plugins(&self) -> Vec<PluginInfo> {
         let mut plugins = self
             .plugins
             .iter()
             .flat_map(|(key, variants)| {
-                variants.iter().map(|variant| PluginName {
+                variants.iter().map(|variant| PluginInfo {
                     name: key.to_owned(),
                     description: variant.descriptor.description.clone(),
                 })
@@ -100,7 +84,7 @@ impl PluginDatabase {
 
     /// Retrieves a specific digest
     #[allow(unused)]
-    pub fn find_by_digest(&self, digest: &str) -> Option<PluginEntry> {
+    pub fn find_by_digest(&self, digest: &str) -> Option<PluginVariant> {
         self.plugins
             .iter()
             .find_map(|(_, variants)| variants.iter().find(|variant| variant.digest == digest))
@@ -120,7 +104,7 @@ impl PluginDatabase {
         &self,
         plugin_name: &str,
         params: PluginDatabaseFindParams,
-    ) -> Vec<PluginEntry> {
+    ) -> Vec<PluginVariant> {
         self.plugins
             .get(plugin_name)
             .map(|variants| {

@@ -9,16 +9,12 @@ use serde::{Deserialize, Serialize};
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 
-use crate::error::{Error, Result};
-
-pub mod plugin_analyzer;
-use plugin_analyzer::PluginDescriptor;
+use memflow_registry_shared::{
+    plugin_analyzer, Error, PluginDescriptor, Result, SignatureVerifier,
+};
 
 pub mod database;
 use database::PluginDatabase;
-
-pub mod pki;
-use pki::SignatureVerifier;
 
 /// Metadata attached to each file
 #[derive(Debug, Serialize, Deserialize)]

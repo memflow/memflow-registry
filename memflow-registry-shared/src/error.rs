@@ -8,6 +8,8 @@ pub type ResponseResult<T> = std::result::Result<T, (axum::http::StatusCode, Str
 #[derive(thiserror::Error, Debug, Clone, PartialEq)]
 pub enum Error {
     // Basic errors
+    #[error("Unknown error: {0}")]
+    Unknown(String),
     #[error("IO error: {0}")]
     IO(String),
     #[error("Parse error: {0}")]
@@ -22,8 +24,16 @@ pub enum Error {
     // External crate error forwards
     #[error("Goblin error: {0}")]
     Goblin(String),
+    #[error("HTTP error: {0}")]
+    Http(String),
     #[error("Signature error: {0}")]
     Signature(String),
+}
+
+impl From<&str> for Error {
+    fn from(err: &str) -> Self {
+        Error::Unknown(err.to_owned())
+    }
 }
 
 impl From<std::convert::Infallible> for Error {

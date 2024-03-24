@@ -16,18 +16,15 @@ use axum_extra::{
 };
 use bytes::BytesMut;
 use log::{info, warn};
-use serde::Serialize;
 use tokio_util::io::ReaderStream;
 
-mod error;
-mod storage;
-
-use error::ResponseResult;
-use storage::{
-    database::{PluginDatabaseFindParams, PluginEntry, PluginName},
-    pki::SignatureVerifier,
-    plugin_analyzer, Storage,
+use memflow_registry_shared::{
+    plugin_analyzer, structs::PluginsFindResponse, PluginsAllResponse, ResponseResult,
+    SignatureVerifier,
 };
+
+mod storage;
+use storage::{database::PluginDatabaseFindParams, Storage};
 
 #[tokio::main]
 async fn main() {
@@ -101,7 +98,7 @@ async fn check_token(
     TypedHeader(authorization): TypedHeader<Authorization<Bearer>>,
     request: Request,
     next: Next,
-) -> Result<Response, StatusCode> {
+) -> std::result::Result<Response, StatusCode> {
     if let Some(token) = auth_token.token {
         if authorization.0.token() != token {
             // token is set but it does not match
@@ -117,21 +114,10 @@ async fn check_token(
     Ok(response)
 }
 
-#[derive(Clone, Serialize)]
-struct PluginsAllResponse {
-    plugins: Vec<PluginName>,
-}
-
 /// Returns a list of all available plugins
 async fn get_plugins(State(storage): State<Storage>) -> ResponseResult<Json<PluginsAllResponse>> {
     let plugins = storage.database().plugins();
     Ok(PluginsAllResponse { plugins }.into())
-}
-
-#[derive(Clone, Serialize)]
-struct PluginsFindResponse {
-    plugins: Vec<PluginEntry>,
-    skip: usize,
 }
 
 /// Returns a list of plugins based on the given filter parameters

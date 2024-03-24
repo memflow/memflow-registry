@@ -437,7 +437,7 @@ mod tests {
 
     #[test]
     fn test_pe_x86_64() {
-        let file = include_bytes!("../../assets/memflow_coredump.x86_64.dll");
+        let file = include_bytes!("../assets/memflow_coredump.x86_64.dll");
 
         assert_eq!(is_binary(&file[..]), Ok(()));
 
@@ -456,7 +456,7 @@ mod tests {
 
     #[test]
     fn test_pe_x86() {
-        let file = include_bytes!("../../assets/memflow_coredump.x86.dll");
+        let file = include_bytes!("../assets/memflow_coredump.x86.dll");
 
         assert_eq!(is_binary(&file[..]), Ok(()));
 
@@ -475,7 +475,7 @@ mod tests {
 
     #[test]
     fn test_elf_x86_64() {
-        let file = include_bytes!("../../assets/libmemflow_coredump.x86_64.so");
+        let file = include_bytes!("../assets/libmemflow_coredump.x86_64.so");
 
         assert_eq!(is_binary(&file[..]), Ok(()));
 
@@ -494,7 +494,7 @@ mod tests {
 
     #[test]
     fn test_elf_x86() {
-        let file = include_bytes!("../../assets/libmemflow_coredump.x86.so");
+        let file = include_bytes!("../assets/libmemflow_coredump.x86.so");
 
         assert_eq!(is_binary(&file[..]), Ok(()));
 
@@ -513,7 +513,7 @@ mod tests {
 
     #[test]
     fn test_elf_arm64() {
-        let file = include_bytes!("../../assets/libmemflow_coredump.aarch64.so");
+        let file = include_bytes!("../assets/libmemflow_coredump.aarch64.so");
 
         assert_eq!(is_binary(&file[..]), Ok(()));
 
@@ -532,7 +532,7 @@ mod tests {
 
     #[test]
     fn test_elf_arm() {
-        let file = include_bytes!("../../assets/libmemflow_coredump.arm.so");
+        let file = include_bytes!("../assets/libmemflow_coredump.arm.so");
 
         assert_eq!(is_binary(&file[..]), Ok(()));
 
@@ -551,7 +551,7 @@ mod tests {
 
     #[test]
     fn test_mach_arm64() {
-        let file = include_bytes!("../../assets/libmemflow_native.aarch64.dylib");
+        let file = include_bytes!("../assets/libmemflow_native.aarch64.dylib");
 
         assert_eq!(is_binary(&file[..]), Ok(()));
 
