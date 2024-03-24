@@ -1,9 +1,15 @@
 use reqwest::{Response, Url};
 
 use memflow_registry_shared::{
-    structs::PluginsFindResponse, Error, PluginInfo, PluginUri, PluginVariant, PluginsAllResponse,
-    Result, MEMFLOW_DEFAULT_REGISTRY,
+    structs::PluginsFindResponse, PluginInfo, PluginUri, PluginVariant, PluginsAllResponse,
+    MEMFLOW_DEFAULT_REGISTRY,
 };
+
+pub use memflow_registry_shared::{Error, Result};
+
+pub mod shared {
+    pub use memflow_registry_shared::*;
+}
 
 fn to_http_err<S: ToString>(err: S) -> Error {
     Error::Http(err.to_string())
