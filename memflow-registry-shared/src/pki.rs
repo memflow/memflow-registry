@@ -38,6 +38,10 @@ pub struct SignatureVerifier {
 impl SignatureVerifier {
     pub fn new<P: AsRef<Path>>(public_key_file: P) -> Result<Self> {
         let verifying_key_pem = fs::read_to_string(public_key_file)?;
+        Self::with_str(&verifying_key_pem)
+    }
+
+    pub fn with_str(verifying_key_pem: &str) -> Result<Self> {
         let verifying_key = VerifyingKey::from_str(&verifying_key_pem)?;
         Ok(Self { verifying_key })
     }
