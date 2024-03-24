@@ -75,14 +75,14 @@ Currently, the image does not support horizontal scaling. Please ensure to only 
 As a first step you might want to upload a plugin. For example you can upload one of the provided sample binaries in the `assets` folder:
 ```bash
 # Generate the file signature:
-$ openssl dgst -sha256 -hex -sign ec-secp256k1-priv-key.pem assets/libmemflow_coredump.aarch64.so
-EC-SHA256(assets/libmemflow_coredump.aarch64.so)= 304402200e45acb16e3f01b6f2f04df06eab1a40f8da90cfaa49a8ad987d013a41c7e647022065ff4ab45e543e5c068e4398c0703cf3142ffa6aee31892672dc6937f624e10a
+$ openssl dgst -sha256 -hex -sign ec-secp256k1-priv-key.pem memflow-registry-shared/assets/libmemflow_coredump.aarch64.so
+EC-SHA256(memflow-registry-shared/assets/libmemflow_coredump.aarch64.so)= 304402200e45acb16e3f01b6f2f04df06eab1a40f8da90cfaa49a8ad987d013a41c7e647022065ff4ab45e543e5c068e4398c0703cf3142ffa6aee31892672dc6937f624e10a
 
 # Set the file signature:
 $ export SIGNATURE="304402200e45acb16e3f01b6f2f04df06eab1a40f8da90cfaa49a8ad987d013a41c7e647022065ff4ab45e543e5c068e4398c0703cf3142ffa6aee31892672dc6937f624e10a"
 
 # Run curl with the appropriate Bearer Token and file signature:
-$ curl -H "Authorization: Bearer token" -F 'file=@assets/libmemflow_coredump.aarch64.so' -F "signature=$SIGNATURE" http://localhost:3000/files
+$ curl -H "Authorization: Bearer token" -F 'file=@memflow-registry-shared/assets/libmemflow_coredump.aarch64.so' -F "signature=$SIGNATURE" http://localhost:3000/files
 ```
 
 To sign and upload all binaries in a folder you can call the above function for all files:

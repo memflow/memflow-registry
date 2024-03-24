@@ -7,7 +7,7 @@ pub mod plugin_uri;
 pub mod structs;
 
 pub use error::{Error, Result};
-pub use pki::SignatureVerifier;
+pub use pki::{SignatureGenerator, SignatureVerifier};
 pub use plugin_analyzer::{PluginArchitecture, PluginDescriptor, PluginFileType};
 pub use plugin_uri::PluginUri;
 pub use structs::{PluginInfo, PluginVariant, PluginsAllResponse};

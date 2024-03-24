@@ -1,8 +1,10 @@
+use std::path::Path;
+
 use reqwest::{Response, Url};
 
 use memflow_registry_shared::{
     structs::PluginsFindResponse, PluginInfo, PluginUri, PluginVariant, PluginsAllResponse,
-    MEMFLOW_DEFAULT_REGISTRY,
+    SignatureGenerator, MEMFLOW_DEFAULT_REGISTRY,
 };
 
 pub use memflow_registry_shared::{Error, Result};
@@ -104,6 +106,62 @@ pub async fn download(plugin_uri: &PluginUri, variant: &PluginVariant) -> Result
 
     let response = reqwest::get(path).await.map_err(to_http_err)?;
     Ok(response)
+}
+
+// TODO: sort
+// TODO: delete
+
+pub async fn upload<P: AsRef<Path>>(
+    registry: Option<&str>,
+    token: Option<&str>,
+    file_path: P,
+    generator: &mut SignatureGenerator,
+) -> Result<String> {
+    // read file
+    let file_content = tokio::fs::read(&file_path).await?;
+
+    // sign payload
+    let signature = generator.sign(&file_content[..])?;
+
+    // setup form
+    let mut form = reqwest::multipart::Form::new();
+    let file_name = file_path
+        .as_ref()
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+    let file_part = reqwest::multipart::Part::bytes(file_content)
+        .file_name(file_name)
+        .mime_str("application/octet-stream")
+        .unwrap();
+    form = form.part("file", file_part);
+    form = form.text("signature", signature);
+
+    // construct query path
+    let mut path: Url = registry
+        .unwrap_or(MEMFLOW_DEFAULT_REGISTRY)
+        .parse()
+        .unwrap();
+    path.set_path("files");
+
+    // send request
+    let client = reqwest::Client::new();
+    let mut builder = client.post(path);
+
+    if let Some(token) = token {
+        builder = builder.bearer_auth(token);
+    }
+
+    let response = builder.multipart(form).send().await.map_err(to_http_err)?;
+
+    let status = response.status();
+    let body = response.text().await.unwrap();
+    if status.is_success() {
+        Ok(body)
+    } else {
+        Err(Error::Http(body))
+    }
 }
 
 fn append_os_arch_filter(path: &mut Url) {
