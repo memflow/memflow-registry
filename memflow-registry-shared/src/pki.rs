@@ -1,7 +1,8 @@
-use k256::ecdsa::{signature::Verifier, Signature, VerifyingKey};
 use std::fs;
 use std::path::Path;
 use std::str::FromStr;
+
+use k256::ecdsa::{signature::Verifier, Signature, VerifyingKey};
 
 use crate::error::Result;
 

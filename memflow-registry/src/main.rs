@@ -20,9 +20,10 @@ use tokio::signal;
 use tokio_util::io::ReaderStream;
 
 use memflow_registry_shared::{
-    plugin_analyzer, structs::PluginsFindResponse, PluginsAllResponse, ResponseResult,
-    SignatureVerifier,
+    plugin_analyzer, structs::PluginsFindResponse, PluginsAllResponse, SignatureVerifier,
 };
+
+pub type ResponseResult<T> = std::result::Result<T, (axum::http::StatusCode, String)>;
 
 mod storage;
 use storage::{database::PluginDatabaseFindParams, Storage};

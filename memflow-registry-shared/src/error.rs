@@ -2,7 +2,6 @@
 
 /// Library result type
 pub type Result<T> = std::result::Result<T, Error>;
-pub type ResponseResult<T> = std::result::Result<T, (axum::http::StatusCode, String)>;
 
 /// Library errors
 #[derive(thiserror::Error, Debug, Clone, PartialEq)]
@@ -68,12 +67,6 @@ impl From<k256::ecdsa::Error> for Error {
 
 impl From<std::num::ParseIntError> for Error {
     fn from(err: std::num::ParseIntError) -> Self {
-        Error::Parse(err.to_string())
-    }
-}
-
-impl From<serde_json::error::Error> for Error {
-    fn from(err: serde_json::error::Error) -> Self {
         Error::Parse(err.to_string())
     }
 }

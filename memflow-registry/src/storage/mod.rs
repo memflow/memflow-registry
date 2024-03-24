@@ -47,7 +47,8 @@ impl Storage {
             if let Some(extension) = path.path().extension() {
                 if extension.to_str().unwrap_or_default() == "meta" {
                     let metadata: PluginMetadata =
-                        serde_json::from_str(&std::fs::read_to_string(path.path())?)?;
+                        serde_json::from_str(&std::fs::read_to_string(path.path())?)
+                            .map_err(|e| Error::Parse(e.to_string()))?;
                     database.insert_all(&metadata)?;
                 }
             }
