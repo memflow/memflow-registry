@@ -8,7 +8,7 @@ use k256::ecdsa::{
     Signature, SigningKey, VerifyingKey,
 };
 
-use crate::error::Result;
+use crate::{error::Result, Error};
 
 #[derive(Clone)]
 pub struct SignatureGenerator {
@@ -59,10 +59,18 @@ pub fn encode_hex(bytes: &[u8]) -> String {
 }
 
 fn decode_hex(s: &str) -> Result<Vec<u8>> {
-    Ok((0..s.len())
+    if s.len() < 2 || s.len() % 2 != 0 {
+        return Err(Error::Parse(
+            "input must have a length that is a multiple 2".to_owned(),
+        ));
+    }
+
+    let hex = (0..s.len())
         .step_by(2)
         .map(|i| u8::from_str_radix(&s[i..i + 2], 16))
-        .collect::<std::result::Result<Vec<_>, _>>()?)
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+
+    Ok(hex)
 }
 
 #[cfg(test)]
@@ -71,7 +79,6 @@ mod tests {
 
     #[test]
     fn test_decode_hex() {
-        // TODO: must not panic
-        assert_eq!(decode_hex("12345"), Ok(vec![]));
+        assert!(decode_hex("12345").is_err());
     }
 }
