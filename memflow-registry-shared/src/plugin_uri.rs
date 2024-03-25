@@ -12,7 +12,7 @@ use crate::{error::Error, MEMFLOW_DEFAULT_REGISTRY};
 /// `memflow.registry.io/coredump` - pulls from another registry
 pub struct PluginUri {
     registry: Option<String>,
-    name: String,
+    image: String,
     version: Option<String>,
 }
 
@@ -20,14 +20,13 @@ impl PluginUri {
     #[inline]
     pub fn registry(&self) -> String {
         self.registry
-            .as_ref()
-            .map(|r| format!("https://{}", r))
+            .clone()
             .unwrap_or_else(|| MEMFLOW_DEFAULT_REGISTRY.to_owned())
     }
 
     #[inline]
-    pub fn name(&self) -> &str {
-        &self.name
+    pub fn image(&self) -> &str {
+        &self.image
     }
 
     #[inline]
@@ -40,27 +39,44 @@ impl FromStr for PluginUri {
     type Err = Error;
 
     fn from_str(s: &str) -> std::prelude::v1::Result<Self, Self::Err> {
-        let path = s.split('/').collect::<Vec<_>>();
-        let version = path
-            .get(1)
-            .unwrap_or_else(|| &path[0])
-            .split(':')
-            .collect::<Vec<_>>();
-        if path.len() > 2 || version.len() > 2 {
-            return Err(Error::Parse(
-                "invalid plugin path. format should be {registry}/{plugin_name}:{plugin_version}"
-                    .to_owned(),
-            ));
-        }
-
-        Ok(PluginUri {
-            registry: if path.len() > 1 {
-                Some(path[0].to_owned())
+        // split up registry and image
+        let image = s.split('/').collect::<Vec<_>>();
+        let (registry, image) = if let Some((image, registry)) = image.split_last() {
+            let registry = if !registry.is_empty() {
+                // TODO parse url
+                let registry_url = registry.join("/");
+                if registry_url.starts_with("http://") || registry_url.starts_with("https://") {
+                    // only allow http scheme if explicitly requested
+                    Some(registry_url)
+                } else {
+                    // prepend https as the default scheme
+                    Some(format!("https://{}", registry_url))
+                }
             } else {
                 None
-            },
-            name: version[0].to_owned(),
-            version: version.get(1).map(|&s| s.to_owned()),
+            };
+
+            (registry, image)
+        } else {
+            (None, &s)
+        };
+
+        // split up image name and version
+        let version = image.split(':').collect::<Vec<_>>();
+        let (image, version) = if let Some((image, version)) = version.split_first() {
+            if !version.is_empty() {
+                (image, Some(version.join(":")))
+            } else {
+                (image, None)
+            }
+        } else {
+            (image, None)
+        };
+
+        Ok(PluginUri {
+            registry,
+            image: image.to_string(),
+            version,
         })
     }
 }
@@ -70,7 +86,7 @@ impl Display for PluginUri {
         if let Some(registry) = &self.registry {
             write!(f, "{}/", registry)?;
         }
-        write!(f, "{}", self.name)?;
+        write!(f, "{}", self.image)?;
         if let Some(version) = &self.version {
             write!(f, ":{}", version)?;
         }
@@ -81,13 +97,12 @@ impl Display for PluginUri {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::error::Result;
 
     #[test]
     pub fn plugin_path_simple() {
         let path: PluginUri = "coredump".parse().unwrap();
         assert_eq!(path.registry(), MEMFLOW_DEFAULT_REGISTRY);
-        assert_eq!(path.name(), "coredump");
+        assert_eq!(path.image(), "coredump");
         assert_eq!(path.version(), "latest");
     }
 
@@ -95,7 +110,7 @@ pub mod tests {
     pub fn plugin_path_with_version() {
         let path: PluginUri = "coredump:0.2.0".parse().unwrap();
         assert_eq!(path.registry(), MEMFLOW_DEFAULT_REGISTRY);
-        assert_eq!(path.name(), "coredump");
+        assert_eq!(path.image(), "coredump");
         assert_eq!(path.version(), "0.2.0");
     }
 
@@ -103,19 +118,33 @@ pub mod tests {
     pub fn plugin_path_with_registry() {
         let path: PluginUri = "registry.memflow.xyz/coredump:0.2.0".parse().unwrap();
         assert_eq!(path.registry(), "https://registry.memflow.xyz");
-        assert_eq!(path.name(), "coredump");
+        assert_eq!(path.image(), "coredump");
+        assert_eq!(path.version(), "0.2.0");
+    }
+
+    #[test]
+    pub fn plugin_path_with_registry_http() {
+        let path: PluginUri = "http://registry.memflow.xyz/coredump:0.2.0"
+            .parse()
+            .unwrap();
+        assert_eq!(path.registry(), "http://registry.memflow.xyz");
+        assert_eq!(path.image(), "coredump");
         assert_eq!(path.version(), "0.2.0");
     }
 
     #[test]
     pub fn plugin_path_invalid_path() {
-        let path: Result<PluginUri> = "registry.memflow.xyz/coredump/test1234".parse();
-        assert!(path.is_err())
+        let path: PluginUri = "registry.memflow.xyz/coredump/test1234".parse().unwrap();
+        assert_eq!(path.registry(), "http://registry.memflow.xyz/coredump");
+        assert_eq!(path.image(), "test1234");
+        assert_eq!(path.version(), "latest");
     }
 
     #[test]
     pub fn plugin_path_invalid_version() {
-        let path: Result<PluginUri> = "test1234:0.2.0:1.0.0".parse();
-        assert!(path.is_err())
+        let path: PluginUri = "test1234:0.2.0:1.0.0".parse().unwrap();
+        assert_eq!(path.registry(), MEMFLOW_DEFAULT_REGISTRY);
+        assert_eq!(path.image(), "test1234");
+        assert_eq!(path.version(), "0.2.0:1.0.0");
     }
 }

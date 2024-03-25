@@ -38,6 +38,7 @@ pub async fn plugins(registry: Option<&str>) -> Result<Vec<PluginInfo>> {
 pub async fn plugin_versions(
     registry: Option<&str>,
     plugin_name: &str,
+    memflow_plugin_version: Option<i32>,
     limit: usize,
 ) -> Result<Vec<PluginVariant>> {
     // construct query path
@@ -50,7 +51,14 @@ pub async fn plugin_versions(
     // setup filtering based on the os memflowup is built for
     {
         let mut query = path.query_pairs_mut();
-        query.append_pair("memflow_plugin_version", "1"); // TODO:
+
+        if let Some(memflow_plugin_version) = memflow_plugin_version {
+            query.append_pair(
+                "memflow_plugin_version",
+                &memflow_plugin_version.to_string(),
+            );
+        }
+
         query.append_pair("limit", &limit.to_string());
     }
     append_os_arch_filter(&mut path);
@@ -66,10 +74,13 @@ pub async fn plugin_versions(
 }
 
 // Downloads a plugin based on the specified uri
-pub async fn find_by_uri(plugin_uri: &PluginUri) -> Result<PluginVariant> {
+pub async fn find_by_uri(
+    plugin_uri: &PluginUri,
+    memflow_plugin_version: Option<i32>,
+) -> Result<PluginVariant> {
     // construct query path
     let mut path: Url = plugin_uri.registry().parse().unwrap();
-    path.set_path(&format!("plugins/{}", plugin_uri.name()));
+    path.set_path(&format!("plugins/{}", plugin_uri.image()));
 
     // setup filtering based on the os memflowup is built for
     {
@@ -77,8 +88,15 @@ pub async fn find_by_uri(plugin_uri: &PluginUri) -> Result<PluginVariant> {
         if plugin_uri.version() != "latest" {
             query.append_pair("version", plugin_uri.version());
         }
-        query.append_pair("memflow_plugin_version", "1"); // TODO:
-                                                          // limit to the latest entry
+
+        if let Some(memflow_plugin_version) = memflow_plugin_version {
+            query.append_pair(
+                "memflow_plugin_version",
+                &memflow_plugin_version.to_string(),
+            );
+        }
+
+        // limit to the latest entry
         query.append_pair("limit", "1");
     }
     append_os_arch_filter(&mut path);

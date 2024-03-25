@@ -42,7 +42,7 @@ impl SignatureVerifier {
     }
 
     pub fn with_str(verifying_key_pem: &str) -> Result<Self> {
-        let verifying_key = VerifyingKey::from_str(&verifying_key_pem)?;
+        let verifying_key = VerifyingKey::from_str(verifying_key_pem)?;
         Ok(Self { verifying_key })
     }
 
