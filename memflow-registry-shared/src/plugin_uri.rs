@@ -135,7 +135,7 @@ pub mod tests {
     #[test]
     pub fn plugin_path_invalid_path() {
         let path: PluginUri = "registry.memflow.xyz/coredump/test1234".parse().unwrap();
-        assert_eq!(path.registry(), "http://registry.memflow.xyz/coredump");
+        assert_eq!(path.registry(), "https://registry.memflow.xyz/coredump");
         assert_eq!(path.image(), "test1234");
         assert_eq!(path.version(), "latest");
     }
