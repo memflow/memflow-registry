@@ -1,9 +1,10 @@
 name: Deploy to docker hub
 
-on:
-  push:
-    tags:
-      - '*'
+on: [push, pull_request]
+#on:
+#  push:
+#    tags:
+#      - '*'
   
 jobs:
 
