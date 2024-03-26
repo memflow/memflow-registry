@@ -1,4 +1,7 @@
-.storage
-assets
+.git
+memflow-registry-shared/assets
+target
 .env
 .pem
+.storage
+.storage.bak
