@@ -16,7 +16,7 @@ pub mod shared {
 #[inline]
 fn to_http_err(err: reqwest::Error) -> Error {
     if let Some(status) = err.status() {
-        Error::Http(format!("status {}: {}", status, err.to_string()))
+        Error::Http(format!("status {}: {}", status, err))
     } else {
         Error::Http(err.to_string())
     }
