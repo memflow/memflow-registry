@@ -1,6 +1,6 @@
 name: Deploy to docker hub
 
-on: [push, pull_request]
+on: [push]
 #on:
 #  push:
 #    tags:
