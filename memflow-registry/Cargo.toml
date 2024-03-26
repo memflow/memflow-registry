@@ -29,6 +29,6 @@ parking_lot = "0.12"
 chrono = { version = "0.4", features = ["serde"] }
 
 [dev-dependencies]
-# axum unit testing
+# unit testing
 tempfile = "3.10"
 tower = "0.4"

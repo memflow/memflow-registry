@@ -282,12 +282,10 @@ async fn delete_file_by_digest(
     Path(digest): Path<String>,
 ) -> ResponseResult<()> {
     // try to delete the file by its digest
-    storage.delete(&digest).await.map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "digest could not be deleted".to_owned(),
-        )
-    })?;
+    storage
+        .delete(&digest)
+        .await
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
     Ok(())
 }

@@ -14,8 +14,12 @@ pub mod shared {
 }
 
 #[inline]
-fn to_http_err<S: ToString>(err: S) -> Error {
-    Error::Http(err.to_string())
+fn to_http_err(err: reqwest::Error) -> Error {
+    if let Some(status) = err.status() {
+        Error::Http(format!("status {}: {}", status, err.to_string()))
+    } else {
+        Error::Http(err.to_string())
+    }
 }
 
 #[inline]
@@ -132,9 +136,6 @@ pub async fn download(plugin_uri: &PluginUri, variant: &PluginVariant) -> Result
     Ok(response)
 }
 
-// TODO: sort
-// TODO: delete
-
 pub async fn upload<P: AsRef<Path>>(
     registry: Option<&str>,
     token: Option<&str>,
@@ -175,7 +176,34 @@ pub async fn upload<P: AsRef<Path>>(
     }
 
     let response = builder.multipart(form).send().await.map_err(to_http_err)?;
+    let status = response.status();
+    let body = response.text().await.unwrap();
+    if status.is_success() {
+        Ok(body)
+    } else {
+        Err(Error::Http(body))
+    }
+}
 
+/// Deletes a file from the registry
+pub async fn delete(
+    registry: Option<&str>,
+    token: Option<&str>,
+    file_digest: &str,
+) -> Result<String> {
+    // construct query path
+    let mut path = parse_registry_url(registry)?;
+    path.set_path(&format!("files/{}", file_digest));
+
+    // send request
+    let client = reqwest::Client::new();
+    let mut builder = client.delete(path);
+
+    if let Some(token) = token {
+        builder = builder.bearer_auth(token);
+    }
+
+    let response = builder.send().await.map_err(to_http_err)?;
     let status = response.status();
     let body = response.text().await.unwrap();
     if status.is_success() {
