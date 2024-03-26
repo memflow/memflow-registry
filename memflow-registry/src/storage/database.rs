@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, collections::HashMap};
+use std::{cmp::Reverse, collections::HashMap};
 
 use log::info;
 use serde::Deserialize;
@@ -45,24 +45,15 @@ impl PluginDatabase {
 
             let entry = self.plugins.entry(descriptor.name.clone()).or_default();
 
-            // sort by plugin_version first, show the highest number first
-            // if plugin_version is equal, sort by created_at timestamp to show the newest ones first
-            let search_by_plugin_version_and_created_at = |entry: &PluginVariant| {
-                // Metadata is guaranteed to contain at least one descriptor and the plugin_version is identical for all connectors of a file.
-                let plugin_version = metadata
-                    .descriptors
-                    .first()
-                    .unwrap()
-                    .plugin_version
-                    .cmp(&entry.descriptor.plugin_version);
-                if plugin_version == Ordering::Equal {
-                    metadata.created_at.cmp(&entry.created_at)
-                } else {
-                    plugin_version
-                }
-            };
-
-            match entry.binary_search_by(search_by_plugin_version_and_created_at) {
+            // sort by plugin_version and created_at
+            // metadata is guaranteed to contain at least one descriptor and the plugin_version is identical for all connectors of a file.
+            let search_key = (
+                metadata.descriptors.first().unwrap().plugin_version,
+                metadata.created_at,
+            );
+            match entry.binary_search_by_key(&Reverse(search_key), |entry| {
+                Reverse((entry.descriptor.plugin_version, entry.created_at))
+            }) {
                 Ok(_) => unreachable!(), // element already in vector @ `pos` // TODO: check for duplicate entries
                 Err(pos) => entry.insert(
                     pos,
