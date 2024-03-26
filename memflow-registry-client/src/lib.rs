@@ -13,16 +13,25 @@ pub mod shared {
     pub use memflow_registry_shared::*;
 }
 
+#[inline]
 fn to_http_err<S: ToString>(err: S) -> Error {
     Error::Http(err.to_string())
 }
 
+#[inline]
+fn parse_registry_url(registry: Option<&str>) -> Result<Url> {
+    // default to https - only allow http scheme if explicitly requested
+    let mut registry = registry.unwrap_or(MEMFLOW_DEFAULT_REGISTRY).to_owned();
+    if !registry.starts_with("http://") && !registry.starts_with("https://") {
+        registry = format!("https://{}", registry);
+    }
+    Ok(registry.parse().unwrap())
+}
+
 /// Retrieves a list of all plugins and their descriptions.
 pub async fn plugins(registry: Option<&str>) -> Result<Vec<PluginInfo>> {
-    let mut path: Url = registry
-        .unwrap_or(MEMFLOW_DEFAULT_REGISTRY)
-        .parse()
-        .unwrap();
+    // construct query path
+    let mut path = parse_registry_url(registry)?;
     path.set_path("plugins");
 
     let response = reqwest::get(path)
@@ -42,10 +51,7 @@ pub async fn plugin_versions(
     limit: usize,
 ) -> Result<Vec<PluginVariant>> {
     // construct query path
-    let mut path: Url = registry
-        .unwrap_or(MEMFLOW_DEFAULT_REGISTRY)
-        .parse()
-        .unwrap();
+    let mut path = parse_registry_url(registry)?;
     path.set_path(&format!("plugins/{}", plugin_name));
 
     // setup filtering based on the os memflowup is built for
@@ -157,10 +163,7 @@ pub async fn upload<P: AsRef<Path>>(
     form = form.text("signature", signature);
 
     // construct query path
-    let mut path: Url = registry
-        .unwrap_or(MEMFLOW_DEFAULT_REGISTRY)
-        .parse()
-        .unwrap();
+    let mut path = parse_registry_url(registry)?;
     path.set_path("files");
 
     // send request

@@ -1,6 +1,9 @@
 use std::{fmt::Display, str::FromStr};
 
-use crate::{error::Error, MEMFLOW_DEFAULT_REGISTRY};
+use crate::{
+    error::{Error, Result},
+    MEMFLOW_DEFAULT_REGISTRY,
+};
 
 /// Parses a plugin string into it's path components
 ///
@@ -11,55 +14,41 @@ use crate::{error::Error, MEMFLOW_DEFAULT_REGISTRY};
 /// `coredump:0.2.0` - will pull the newest binary with this specific version
 /// `memflow.registry.io/coredump` - pulls from another registry
 pub struct PluginUri {
-    registry: Option<String>,
+    registry: String,
     image: String,
-    version: Option<String>,
+    version: String,
 }
 
 impl PluginUri {
-    #[inline]
-    pub fn registry(&self) -> String {
-        self.registry
-            .clone()
-            .unwrap_or_else(|| MEMFLOW_DEFAULT_REGISTRY.to_owned())
+    pub fn new(plugin_uri: &str) -> Result<Self> {
+        Self::with_defaults(plugin_uri, MEMFLOW_DEFAULT_REGISTRY, "latest")
     }
 
-    #[inline]
-    pub fn image(&self) -> &str {
-        &self.image
-    }
-
-    #[inline]
-    pub fn version(&self) -> &str {
-        self.version.as_deref().unwrap_or("latest")
-    }
-}
-
-impl FromStr for PluginUri {
-    type Err = Error;
-
-    fn from_str(s: &str) -> std::prelude::v1::Result<Self, Self::Err> {
+    pub fn with_defaults(
+        plugin_uri: &str,
+        default_registry: &str,
+        default_version: &str,
+    ) -> Result<Self> {
         // split up registry and image
-        let image = s.split('/').collect::<Vec<_>>();
+        let image = plugin_uri.split('/').collect::<Vec<_>>();
         let (registry, image) = if let Some((image, registry)) = image.split_last() {
             let registry = if !registry.is_empty() {
                 // TODO parse url
-                let registry_url = registry.join("/");
-                if registry_url.starts_with("http://") || registry_url.starts_with("https://") {
-                    // only allow http scheme if explicitly requested
-                    Some(registry_url)
-                } else {
-                    // prepend https as the default scheme
-                    Some(format!("https://{}", registry_url))
-                }
+                Some(registry.join("/"))
             } else {
                 None
             };
 
             (registry, image)
         } else {
-            (None, &s)
+            (None, &plugin_uri)
         };
+
+        // default to https - only allow http scheme if explicitly requested
+        let mut registry = registry.unwrap_or_else(|| default_registry.to_owned());
+        if !registry.starts_with("http://") && !registry.starts_with("https://") {
+            registry = format!("https://{}", registry);
+        }
 
         // split up image name and version
         let version = image.split(':').collect::<Vec<_>>();
@@ -76,21 +65,37 @@ impl FromStr for PluginUri {
         Ok(PluginUri {
             registry,
             image: image.to_string(),
-            version,
+            version: version.unwrap_or(default_version.to_owned()),
         })
+    }
+
+    #[inline]
+    pub fn registry(&self) -> &str {
+        &self.registry
+    }
+
+    #[inline]
+    pub fn image(&self) -> &str {
+        &self.image
+    }
+
+    #[inline]
+    pub fn version(&self) -> &str {
+        &self.version
+    }
+}
+
+impl FromStr for PluginUri {
+    type Err = Error;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        PluginUri::new(s)
     }
 }
 
 impl Display for PluginUri {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if let Some(registry) = &self.registry {
-            write!(f, "{}/", registry)?;
-        }
-        write!(f, "{}", self.image)?;
-        if let Some(version) = &self.version {
-            write!(f, ":{}", version)?;
-        }
-        Ok(())
+        write!(f, "{}/{}:{}", self.registry, self.image, self.version)
     }
 }
 
@@ -146,5 +151,13 @@ pub mod tests {
         assert_eq!(path.registry(), MEMFLOW_DEFAULT_REGISTRY);
         assert_eq!(path.image(), "test1234");
         assert_eq!(path.version(), "0.2.0:1.0.0");
+    }
+
+    #[test]
+    pub fn plugin_path_custom_defaults() {
+        let path = PluginUri::with_defaults("coredump", "test.xyz", "newest").unwrap();
+        assert_eq!(path.registry(), "https://test.xyz");
+        assert_eq!(path.image(), "coredump");
+        assert_eq!(path.version(), "newest");
     }
 }
