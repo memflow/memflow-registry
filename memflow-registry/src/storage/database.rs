@@ -22,8 +22,6 @@ pub struct PluginDatabaseFindParams {
     pub memflow_plugin_version: Option<i32>,
     pub file_type: Option<PluginFileType>,
     pub architecture: Option<PluginArchitecture>,
-    pub digest: Option<String>,
-    pub digest_short: Option<String>,
 
     // pagination parameters
     pub skip: Option<usize>,
@@ -130,7 +128,10 @@ impl PluginDatabase {
                     .filter(|p| p.descriptor.name == plugin_name)
                     .filter(|p| {
                         if let Some(version) = &params.version {
-                            if *version != p.descriptor.version {
+                            // version can match the version directly or the corresponding digest
+                            if *version != p.descriptor.version
+                                && *version != p.digest[..version.len()]
+                            {
                                 return false;
                             }
                         }
@@ -149,18 +150,6 @@ impl PluginDatabase {
 
                         if let Some(architecture) = params.architecture {
                             if architecture != p.descriptor.architecture {
-                                return false;
-                            }
-                        }
-
-                        if let Some(digest) = &params.digest {
-                            if *digest != p.digest {
-                                return false;
-                            }
-                        }
-
-                        if let Some(digest_short) = &params.digest_short {
-                            if *digest_short != p.digest[..7] {
                                 return false;
                             }
                         }
