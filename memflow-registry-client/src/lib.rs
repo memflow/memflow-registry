@@ -13,6 +13,7 @@ pub mod shared {
     pub use memflow_registry_shared::*;
 }
 
+// TODO: replace
 #[inline]
 fn to_http_err(err: reqwest::Error) -> Error {
     if let Some(status) = err.status() {
@@ -51,6 +52,7 @@ pub async fn plugins(registry: Option<&str>) -> Result<Vec<PluginInfo>> {
 pub async fn plugin_versions(
     registry: Option<&str>,
     plugin_name: &str,
+    all_archs: bool,
     memflow_plugin_version: Option<i32>,
     limit: usize,
 ) -> Result<Vec<PluginVariant>> {
@@ -71,7 +73,9 @@ pub async fn plugin_versions(
 
         query.append_pair("limit", &limit.to_string());
     }
-    append_os_arch_filter(&mut path);
+    if !all_archs {
+        append_os_arch_filter(&mut path);
+    }
 
     let response = reqwest::get(path)
         .await
@@ -86,6 +90,7 @@ pub async fn plugin_versions(
 // Downloads a plugin based on the specified uri
 pub async fn find_by_uri(
     plugin_uri: &PluginUri,
+    all_archs: bool,
     memflow_plugin_version: Option<i32>,
 ) -> Result<PluginVariant> {
     // construct query path
@@ -109,7 +114,9 @@ pub async fn find_by_uri(
         // limit to the latest entry
         query.append_pair("limit", "1");
     }
-    append_os_arch_filter(&mut path);
+    if !all_archs {
+        append_os_arch_filter(&mut path);
+    }
 
     let response = reqwest::get(path)
         .await
