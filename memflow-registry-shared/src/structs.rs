@@ -27,3 +27,10 @@ pub struct PluginsFindResponse {
     pub plugins: Vec<PluginVariant>,
     pub skip: usize,
 }
+
+/// Result of an upload request
+#[derive(Debug, Serialize, Deserialize)]
+pub enum PluginUploadResponse {
+    Added,
+    AlreadyExists,
+}

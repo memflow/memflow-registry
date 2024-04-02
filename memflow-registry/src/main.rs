@@ -20,13 +20,17 @@ use tokio::signal;
 use tokio_util::io::ReaderStream;
 
 use memflow_registry_shared::{
-    plugin_analyzer, structs::PluginsFindResponse, PluginsAllResponse, SignatureVerifier,
+    plugin_analyzer,
+    structs::{PluginUploadResponse, PluginsFindResponse},
+    PluginsAllResponse, SignatureVerifier,
 };
 
 pub type ResponseResult<T> = std::result::Result<T, (axum::http::StatusCode, String)>;
 
 mod storage;
 use storage::{database::PluginDatabaseFindParams, Storage};
+
+use crate::storage::UploadResponse;
 
 #[tokio::main]
 async fn main() {
@@ -172,7 +176,7 @@ async fn find_plugin_variants(
 async fn upload_file(
     State(storage): State<Storage>,
     mut multipart: Multipart,
-) -> ResponseResult<()> {
+) -> ResponseResult<Json<PluginUploadResponse>> {
     let mut file_data = None;
     let mut file_signature = None;
 
@@ -229,12 +233,14 @@ async fn upload_file(
                 &signature
             );
 
+            // TODO: do not require duplicate struct definitions here
             // upload file
-            storage
-                .upload(&data[..], &signature)
-                .await
-                .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?;
-            Ok(())
+            let result = storage.upload(&data[..], &signature).await;
+            match result {
+                Ok(UploadResponse::Added) => Ok(PluginUploadResponse::Added.into()),
+                Ok(UploadResponse::AlreadyExists) => Ok(PluginUploadResponse::AlreadyExists.into()),
+                Err(err) => Err((StatusCode::BAD_REQUEST, err.to_string())),
+            }
         } else {
             Err((
                 StatusCode::BAD_REQUEST,

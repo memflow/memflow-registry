@@ -3,8 +3,9 @@ use std::path::Path;
 use reqwest::{Response, Url};
 
 use memflow_registry_shared::{
-    structs::PluginsFindResponse, PluginInfo, PluginUri, PluginVariant, PluginsAllResponse,
-    SignatureGenerator, MEMFLOW_DEFAULT_REGISTRY,
+    structs::{PluginUploadResponse, PluginsFindResponse},
+    PluginInfo, PluginUri, PluginVariant, PluginsAllResponse, SignatureGenerator,
+    MEMFLOW_DEFAULT_REGISTRY,
 };
 
 pub use memflow_registry_shared::{Error, Result};
@@ -148,7 +149,7 @@ pub async fn upload<P: AsRef<Path>>(
     token: Option<&str>,
     file_path: P,
     generator: &mut SignatureGenerator,
-) -> Result<String> {
+) -> Result<PluginUploadResponse> {
     // read file
     let file_content = tokio::fs::read(&file_path).await?;
 
@@ -184,10 +185,14 @@ pub async fn upload<P: AsRef<Path>>(
 
     let response = builder.multipart(form).send().await.map_err(to_http_err)?;
     let status = response.status();
-    let body = response.text().await.unwrap();
     if status.is_success() {
+        let body = response
+            .json::<PluginUploadResponse>()
+            .await
+            .map_err(to_http_err)?;
         Ok(body)
     } else {
+        let body = response.text().await.map_err(to_http_err)?;
         Err(Error::Http(body))
     }
 }

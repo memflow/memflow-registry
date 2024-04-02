@@ -37,6 +37,13 @@ pub struct Storage {
     signature_verifier: Option<SignatureVerifier>,
 }
 
+/// Result of an upload request
+#[derive(Debug, Serialize, Deserialize)]
+pub enum UploadResponse {
+    Added,
+    AlreadyExists,
+}
+
 impl Storage {
     pub fn new<P: AsRef<Path>>(root: P) -> Result<Self> {
         // TODO: create path if not exists
@@ -68,7 +75,7 @@ impl Storage {
     }
 
     /// Writes the specified connector into the path and adds it into the database.
-    pub async fn upload(&self, bytes: &[u8], signature: &str) -> Result<()> {
+    pub async fn upload(&self, bytes: &[u8], signature: &str) -> Result<UploadResponse> {
         // TODO: what happens with old signatures in case we change the signing key?
         if let Some(verifier) = &self.signature_verifier {
             if let Err(err) = verifier.is_valid(bytes, signature) {
@@ -89,9 +96,8 @@ impl Storage {
 
         // check if digest is already existent
         if file_name.exists() {
-            return Err(Error::AlreadyExists(
-                "plugin with the same digest was already added".to_owned(),
-            ));
+            warn!("plugin with the same digest was already added");
+            return Ok(UploadResponse::AlreadyExists);
         }
 
         // write plugin
@@ -115,7 +121,7 @@ impl Storage {
         let mut database = self.database.write();
         database.insert_all(&metadata)?;
 
-        Ok(())
+        Ok(UploadResponse::Added)
     }
 
     pub async fn download(&self, digest: &str) -> Result<File> {
