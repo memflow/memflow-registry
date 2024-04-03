@@ -16,11 +16,11 @@ use axum_extra::{
 };
 use bytes::BytesMut;
 use log::{info, warn};
+use memflow::plugins::plugin_analyzer;
 use tokio::signal;
 use tokio_util::io::ReaderStream;
 
 use memflow_registry_shared::{
-    plugin_analyzer,
     structs::{PluginUploadResponse, PluginsFindResponse},
     PluginsAllResponse, SignatureVerifier,
 };

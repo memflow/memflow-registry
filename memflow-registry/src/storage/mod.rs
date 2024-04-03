@@ -4,14 +4,14 @@ use std::sync::Arc;
 
 use chrono::{NaiveDateTime, Utc};
 use log::warn;
+use memflow::plugins::plugin_analyzer;
+use memflow::plugins::plugin_analyzer::PluginDescriptor;
 use parking_lot::{lock_api::RwLockReadGuard, RawRwLock, RwLock};
 use serde::{Deserialize, Serialize};
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 
-use memflow_registry_shared::{
-    plugin_analyzer, Error, PluginDescriptor, Result, SignatureVerifier,
-};
+use memflow_registry_shared::{Error, Result, SignatureVerifier};
 
 pub mod database;
 use database::PluginDatabase;

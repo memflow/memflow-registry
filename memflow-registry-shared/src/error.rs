@@ -21,8 +21,8 @@ pub enum Error {
     NotImplemented(String),
 
     // External crate error forwards
-    #[error("Goblin error: {0}")]
-    Goblin(String),
+    #[error("Memflow error: {0}")]
+    Memflow(String),
     #[error("HTTP error: {0}")]
     Http(String),
     #[error("Signature error: {0}")]
@@ -53,9 +53,9 @@ impl From<std::str::Utf8Error> for Error {
     }
 }
 
-impl From<goblin::error::Error> for Error {
-    fn from(err: goblin::error::Error) -> Self {
-        Error::Goblin(err.to_string())
+impl From<memflow::error::Error> for Error {
+    fn from(err: memflow::error::Error) -> Self {
+        Error::Memflow(err.to_string())
     }
 }
 

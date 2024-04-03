@@ -1,11 +1,10 @@
 use std::{cmp::Reverse, collections::HashMap};
 
 use log::info;
+use memflow::plugins::plugin_analyzer::{PluginArchitecture, PluginFileType};
 use serde::Deserialize;
 
-use memflow_registry_shared::{
-    PluginArchitecture, PluginFileType, PluginInfo, PluginVariant, Result,
-};
+use memflow_registry_shared::{PluginInfo, PluginVariant, Result};
 
 use super::PluginMetadata;
 

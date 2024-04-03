@@ -1,7 +1,6 @@
 use chrono::NaiveDateTime;
+use memflow::plugins::plugin_analyzer::PluginDescriptor;
 use serde::{Deserialize, Serialize};
-
-use crate::PluginDescriptor;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PluginInfo {

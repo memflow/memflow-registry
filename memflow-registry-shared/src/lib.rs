@@ -6,12 +6,10 @@ wt3vkyIaLMfMcmIUISq9c51CsNLKPYxzOGS7PW3Nyd0NQWjCvR74mQ==
 
 pub mod error;
 pub mod pki;
-pub mod plugin_analyzer;
 pub mod plugin_uri;
 pub mod structs;
 
 pub use error::{Error, Result};
 pub use pki::{SignatureGenerator, SignatureVerifier};
-pub use plugin_analyzer::{PluginArchitecture, PluginDescriptor, PluginFileType};
 pub use plugin_uri::PluginUri;
 pub use structs::{PluginInfo, PluginVariant, PluginsAllResponse};
