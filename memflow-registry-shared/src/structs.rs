@@ -1,6 +1,13 @@
 use chrono::NaiveDateTime;
-use memflow::plugins::plugin_analyzer::PluginDescriptor;
+use memflow::plugins::plugin_analyzer::PluginDescriptorInfo;
 use serde::{Deserialize, Serialize};
+
+/// Health status of the service
+#[derive(Debug, Serialize, Deserialize)]
+pub enum HealthResponse {
+    Ok,
+    Error(String),
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PluginInfo {
@@ -13,7 +20,7 @@ pub struct PluginVariant {
     pub digest: String,
     pub signature: String,
     pub created_at: NaiveDateTime,
-    pub descriptor: PluginDescriptor,
+    pub descriptor: PluginDescriptorInfo,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

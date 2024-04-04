@@ -5,7 +5,7 @@ use std::sync::Arc;
 use chrono::{NaiveDateTime, Utc};
 use log::warn;
 use memflow::plugins::plugin_analyzer;
-use memflow::plugins::plugin_analyzer::PluginDescriptor;
+use memflow::plugins::plugin_analyzer::PluginDescriptorInfo;
 use parking_lot::{lock_api::RwLockReadGuard, RawRwLock, RwLock};
 use serde::{Deserialize, Serialize};
 use tokio::fs::File;
@@ -26,7 +26,7 @@ pub struct PluginMetadata {
     /// Timestamp at which the file was added
     pub created_at: NaiveDateTime,
     /// The plugin descriptor
-    pub descriptors: Vec<PluginDescriptor>,
+    pub descriptors: Vec<PluginDescriptorInfo>,
 }
 
 ///
@@ -151,6 +151,17 @@ impl Storage {
         Ok(())
     }
 
+    /// Returns the health state of the database by checking if the storage folder is still accessible
+    #[inline]
+    pub fn health(&self) -> Result<()> {
+        let paths = std::fs::read_dir(&self.root)?;
+        for _path in paths.filter_map(|p| p.ok()) {
+            // no-op
+        }
+        Ok(())
+    }
+
+    /// Returns a read-only lock to the underlying database
     #[inline]
     pub fn database(&self) -> RwLockReadGuard<RawRwLock, PluginDatabase> {
         self.database.read()

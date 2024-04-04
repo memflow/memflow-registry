@@ -21,7 +21,7 @@ use tokio::signal;
 use tokio_util::io::ReaderStream;
 
 use memflow_registry_shared::{
-    structs::{PluginUploadResponse, PluginsFindResponse},
+    structs::{HealthResponse, PluginUploadResponse, PluginsFindResponse},
     PluginsAllResponse, SignatureVerifier,
 };
 
@@ -113,6 +113,7 @@ fn app(storage: Storage) -> Router {
         .with_state(storage.clone());
 
     let public_routes = Router::new()
+        .route("/health", get(health))
         .route("/plugins", get(get_plugins))
         .route("/plugins/:plugin_name", get(find_plugin_variants))
         .route("/files/:digest", get(find_file_by_digest))
@@ -145,6 +146,19 @@ async fn check_token(
 
     let response = next.run(request).await;
     Ok(response)
+}
+
+/// Returns a health status
+async fn health(
+    State(storage): State<Storage>,
+) -> std::result::Result<Json<HealthResponse>, (axum::http::StatusCode, Json<HealthResponse>)> {
+    match storage.health() {
+        Ok(()) => Ok(HealthResponse::Ok.into()),
+        Err(_) => Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            HealthResponse::Error("database unhealthy".to_owned()).into(),
+        )),
+    }
 }
 
 /// Returns a list of all available plugins
