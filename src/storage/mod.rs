@@ -20,7 +20,7 @@ pub mod database;
 use database::PluginDatabase;
 
 /// Metadata attached to each file
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginMetadata {
     /// The sha256sum of the binary file
     pub digest: String,
