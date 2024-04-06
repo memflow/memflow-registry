@@ -12,6 +12,7 @@ use super::PluginMetadata;
 const DEFAULT_PLUGIN_VARIANTS: usize = 5;
 const MAX_PLUGIN_VARIANTS: usize = 50;
 
+#[derive(Default)]
 pub struct PluginDatabase {
     plugins: HashMap<String, Vec<PluginVariant>>,
 }
@@ -38,9 +39,7 @@ pub struct PluginDatabaseFindParams {
 
 impl PluginDatabase {
     pub fn new() -> Self {
-        Self {
-            plugins: HashMap::new(),
-        }
+        Self::default()
     }
 
     /// Inserts all plugin variants of this file into the database

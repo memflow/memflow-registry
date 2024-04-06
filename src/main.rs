@@ -1,26 +1,8 @@
-use axum::{
-    body::Body,
-    extract::{DefaultBodyLimit, Multipart, Path, Query, Request, State},
-    http::{
-        header::{CONTENT_LENGTH, CONTENT_TYPE},
-        HeaderValue, StatusCode,
-    },
-    middleware::{self, Next},
-    response::{IntoResponse, Response},
-    routing::{delete, get, post},
-    Json, Router,
-};
-use axum_extra::{
-    headers::{authorization::Bearer, Authorization},
-    TypedHeader,
-};
-use bytes::BytesMut;
+use axum::{extract::State, http::StatusCode, routing::get, Json, Router};
 use log::{info, warn};
-use memflow::plugins::plugin_analyzer;
 use rest::middlewares::AuthorizationToken;
 use serde::{Deserialize, Serialize};
 use tokio::signal;
-use tokio_util::io::ReaderStream;
 
 mod default_registry;
 mod error;
@@ -30,7 +12,7 @@ mod rest;
 mod storage;
 
 use pki::SignatureVerifier;
-use storage::{database::PluginDatabaseFindParams, PluginMetadata, Storage, UploadResponse};
+use storage::Storage;
 
 #[tokio::main]
 async fn main() {

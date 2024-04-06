@@ -6,6 +6,7 @@ pub type ResponseResult<T> = std::result::Result<T, (axum::http::StatusCode, Str
 
 /// Library errors
 #[derive(thiserror::Error, Debug, Clone, PartialEq)]
+#[allow(unused)]
 pub enum Error {
     // Basic errors
     #[error("Unknown error: {0}")]

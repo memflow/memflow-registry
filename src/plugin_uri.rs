@@ -19,6 +19,7 @@ pub struct PluginUri {
     version: String,
 }
 
+#[allow(unused)]
 impl PluginUri {
     pub fn new(plugin_uri: &str) -> Result<Self> {
         Self::with_defaults(plugin_uri, MEMFLOW_DEFAULT_REGISTRY, "latest")

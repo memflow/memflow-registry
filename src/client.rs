@@ -5,6 +5,7 @@ use reqwest::{Response, Url};
 use crate::{
     error::{Error, Result},
     rest::models::{PluginUploadResponse, PluginsFindResponse},
+    storage::PluginMetadata,
     PluginInfo, PluginUri, PluginVariant, PluginsAllResponse, SignatureGenerator,
     MEMFLOW_DEFAULT_REGISTRY,
 };
@@ -137,6 +138,17 @@ pub async fn download(plugin_uri: &PluginUri, variant: &PluginVariant) -> Result
 
     let response = reqwest::get(path).await.map_err(to_http_err)?;
     Ok(response)
+}
+
+pub async fn metadata(plugin_uri: &PluginUri, variant: &PluginVariant) -> Result<PluginMetadata> {
+    let mut path: Url = plugin_uri.registry().parse().unwrap();
+    path.set_path(&format!("files/{}/metadata", variant.digest));
+    reqwest::get(path)
+        .await
+        .map_err(to_http_err)?
+        .json::<PluginMetadata>()
+        .await
+        .map_err(to_http_err)
 }
 
 pub async fn upload<P: AsRef<Path>>(

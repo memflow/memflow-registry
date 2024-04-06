@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use std::fmt::Write;
 use std::fs;
 use std::path::Path;
