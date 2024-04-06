@@ -2,17 +2,12 @@ use std::path::Path;
 
 use reqwest::{Response, Url};
 
-use memflow_registry_shared::{
-    structs::{PluginUploadResponse, PluginsFindResponse},
+use crate::{
+    error::{Error, Result},
+    rest::models::{PluginUploadResponse, PluginsFindResponse},
     PluginInfo, PluginUri, PluginVariant, PluginsAllResponse, SignatureGenerator,
     MEMFLOW_DEFAULT_REGISTRY,
 };
-
-pub use memflow_registry_shared::{Error, Result};
-
-pub mod shared {
-    pub use memflow_registry_shared::*;
-}
 
 // TODO: replace
 #[inline]

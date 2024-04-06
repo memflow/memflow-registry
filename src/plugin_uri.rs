@@ -1,8 +1,8 @@
 use std::{fmt::Display, str::FromStr};
 
 use crate::{
+    default_registry::MEMFLOW_DEFAULT_REGISTRY,
     error::{Error, Result},
-    MEMFLOW_DEFAULT_REGISTRY,
 };
 
 /// Parses a plugin string into it's path components

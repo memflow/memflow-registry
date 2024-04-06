@@ -153,6 +153,31 @@ All plugins are sorted by upload date. So the latest version of a specific varia
 $ curl -v http://localhost:3000/files/880e0e255146016e820a5890137599936232ea9bf26053697541f2c579921065 --output file.dll
 ```
 
+### Retrieve metadata for a specific plugin
+
+```bash
+$ curl -v http://localhost:3000/files/880e0e255146016e820a5890137599936232ea9bf26053697541f2c579921065/metadata
+```
+```json
+{
+  "digest": "30d5292c0acf87cf7a4ebddfcd108230f864609c882a0f7ca26ecbff4b2f5ee6",
+  "signature": "3044022030E3E6C64269B29FA2FDE1E62774EAD6EF756C61C31E0A1287C9D55F53951AB302205CEC067CDE046A874701DCA2CD22346E6FD6D86B1ACCCC4CD7FC366E441556F8",
+  "created_at": "2024-04-06T20:49:56.440891100",
+  "descriptors": [
+    {
+      "plugin_kind": "connector",
+      "export_name": "MEMFLOW_CONNECTOR_COREDUMP",
+      "file_type": "elf",
+      "architecture": "x86_64",
+      "plugin_version": 1,
+      "name": "coredump",
+      "version": "0.2.0",
+      "description": "win32 coredump connector for the memflow physical memory introspection framework"
+    }
+  ]
+}
+```
+
 ### Delete a plugin binary
 
 ```bash

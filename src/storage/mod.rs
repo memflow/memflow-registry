@@ -11,7 +11,10 @@ use serde::{Deserialize, Serialize};
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 
-use memflow_registry_shared::{Error, Result, SignatureVerifier};
+use crate::{
+    error::{Error, Result},
+    pki::SignatureVerifier,
+};
 
 pub mod database;
 use database::PluginDatabase;
@@ -124,10 +127,19 @@ impl Storage {
         Ok(UploadResponse::Added)
     }
 
+    /// Returns a handle to the file
     pub async fn download(&self, digest: &str) -> Result<File> {
         let mut file_name = self.root.clone().join(digest);
         file_name.set_extension("plugin");
         Ok(File::open(&file_name).await?)
+    }
+
+    /// Returns the metadata of the file
+    pub async fn metadata(&self, digest: &str) -> Result<PluginMetadata> {
+        let mut file_name = self.root.clone().join(digest);
+        file_name.set_extension("meta");
+        let content = tokio::fs::read_to_string(&file_name).await?;
+        Ok(serde_json::from_str(&content).unwrap())
     }
 
     /// Deletes the file with the given digest from the database.

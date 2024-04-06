@@ -8,7 +8,7 @@ use k256::ecdsa::{
     Signature, SigningKey, VerifyingKey,
 };
 
-use crate::{error::Result, Error};
+use crate::error::{Error, Result};
 
 #[derive(Clone)]
 pub struct SignatureGenerator {

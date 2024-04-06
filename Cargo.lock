@@ -290,6 +290,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
 
 [[package]]
+name = "base64"
+version = "0.22.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9475866fec1451be56a3c2400fd081ff546538961565ccb5b7142cbd22bc7a51"
+
+[[package]]
 name = "base64ct"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -798,9 +804,9 @@ dependencies = [
 
 [[package]]
 name = "getrandom"
-version = "0.2.12"
+version = "0.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "190092ea657667030ac6a35e305e62fc4dd69fd98ac98631e5d3a2b1575a12b5"
+checksum = "a06fddc2749e0528d2813f95e050e87e52c8cbbae56223b9babf73b3e53b0cc6"
 dependencies = [
  "cfg-if",
  "libc",
@@ -851,7 +857,7 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "322106e6bd0cba2d5ead589ddb8150a13d7c4217cf80d7c4f682ca994ccc6aa9"
 dependencies = [
- "base64",
+ "base64 0.21.7",
  "bytes",
  "headers-core",
  "http",
@@ -1190,7 +1196,7 @@ checksum = "6c8640c5d730cb13ebd907d8d04b52f55ac9a2eec55b440c8892f40d56c76c1d"
 [[package]]
 name = "memflow"
 version = "0.2.1"
-source = "git+https://github.com/memflow/memflow#2d9dc31a1f8e4d7afc1719c33060017277548b4f"
+source = "git+https://github.com/memflow/memflow#d71da73e8de1ddc0c778bc8d20baed1fa518879a"
 dependencies = [
  "abi_stable",
  "bitflags 1.3.2",
@@ -1221,7 +1227,7 @@ dependencies = [
 [[package]]
 name = "memflow-derive"
 version = "0.2.0"
-source = "git+https://github.com/memflow/memflow#2d9dc31a1f8e4d7afc1719c33060017277548b4f"
+source = "git+https://github.com/memflow/memflow#d71da73e8de1ddc0c778bc8d20baed1fa518879a"
 dependencies = [
  "darling",
  "proc-macro-crate",
@@ -1240,10 +1246,11 @@ dependencies = [
  "chrono",
  "dotenv",
  "env_logger",
+ "k256",
  "log",
  "memflow",
- "memflow-registry-shared",
  "parking_lot 0.12.1",
+ "reqwest",
  "serde",
  "serde_json",
  "sha256",
@@ -1252,29 +1259,6 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tower",
-]
-
-[[package]]
-name = "memflow-registry-client"
-version = "0.1.0"
-dependencies = [
- "log",
- "memflow-registry-shared",
- "reqwest",
- "tokio",
-]
-
-[[package]]
-name = "memflow-registry-shared"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "k256",
- "log",
- "memflow",
- "serde",
- "sha256",
- "thiserror",
 ]
 
 [[package]]
@@ -1632,11 +1616,11 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.12.2"
+version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d66674f2b6fb864665eea7a3c1ac4e3dfacd2fda83cf6f935a612e01b0e3338"
+checksum = "3e6cc1e89e689536eb5aeede61520e874df5a4707df811cd5da4aa5fbb2aae19"
 dependencies = [
- "base64",
+ "base64 0.22.0",
  "bytes",
  "futures-core",
  "futures-util",
@@ -1752,11 +1736,12 @@ dependencies = [
 
 [[package]]
 name = "rustls-pemfile"
-version = "1.0.4"
+version = "2.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c74cae0a4cf6ccbbf5f359f08efdf8ee7e1dc532573bf0db71968cb56b1448c"
+checksum = "29993a25686778eb88d4189742cd713c9bce943bc54251a33509dc63cbacf73d"
 dependencies = [
- "base64",
+ "base64 0.22.0",
+ "rustls-pki-types",
 ]
 
 [[package]]
@@ -1778,9 +1763,9 @@ dependencies = [
 
 [[package]]
 name = "rustversion"
-version = "1.0.14"
+version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ffc183a10b4478d04cbbbfc96d0873219d962dd5accaff2ffbd4ceb7df837f4"
+checksum = "80af6f9131f277a45a3fba6ce8e2258037bb0477a67e610d3c1fe046ab31de47"
 
 [[package]]
 name = "ryu"
@@ -2666,9 +2651,9 @@ dependencies = [
 
 [[package]]
 name = "winreg"
-version = "0.50.0"
+version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "524e57b2c537c0f9b1e69f1965311ec12182b4122e45035b1508cd24d2adadb1"
+checksum = "a277a57398d4bfa075df44f501a17cfdf8542d224f0d36095a2adc7aee4ef0a5"
 dependencies = [
  "cfg-if",
  "windows-sys 0.48.0",

@@ -1,10 +1,11 @@
 use std::{cmp::Reverse, collections::HashMap};
 
+use chrono::NaiveDateTime;
 use log::info;
-use memflow::plugins::plugin_analyzer::{PluginArchitecture, PluginFileType};
-use serde::Deserialize;
+use memflow::plugins::plugin_analyzer::{PluginArchitecture, PluginDescriptorInfo, PluginFileType};
+use serde::{Deserialize, Serialize};
 
-use memflow_registry_shared::{PluginInfo, PluginVariant, Result};
+use crate::{error::Result, rest::models::PluginInfo};
 
 use super::PluginMetadata;
 
@@ -13,6 +14,14 @@ const MAX_PLUGIN_VARIANTS: usize = 50;
 
 pub struct PluginDatabase {
     plugins: HashMap<String, Vec<PluginVariant>>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct PluginVariant {
+    pub digest: String,
+    pub signature: String,
+    pub created_at: NaiveDateTime,
+    pub descriptor: PluginDescriptorInfo,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]

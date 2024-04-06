@@ -2,6 +2,7 @@
 
 /// Library result type
 pub type Result<T> = std::result::Result<T, Error>;
+pub type ResponseResult<T> = std::result::Result<T, (axum::http::StatusCode, String)>;
 
 /// Library errors
 #[derive(thiserror::Error, Debug, Clone, PartialEq)]
