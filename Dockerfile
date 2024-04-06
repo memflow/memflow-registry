@@ -3,7 +3,7 @@ FROM rust:slim-buster as builder
 WORKDIR /usr/src/memflow-registry
 COPY . .
 
-WORKDIR /usr/src/memflow-registry/memflow-registry
+WORKDIR /usr/src/memflow-registry
 RUN cargo install --path .
 
 FROM debian:buster-slim
