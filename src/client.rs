@@ -126,7 +126,7 @@ pub async fn find_by_uri(
         Ok(variant.to_owned())
     } else {
         Err(Error::NotFound(format!(
-            "plugin `{}` not found",
+            "plugin `{}` not found for the current architecture",
             plugin_uri
         )))
     }
