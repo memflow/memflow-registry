@@ -32,7 +32,7 @@ pub struct PluginMetadata {
     pub descriptors: Vec<PluginDescriptorInfo>,
 }
 
-///
+/// Local Plugin storage
 #[derive(Clone)]
 pub struct Storage {
     root: PathBuf,
