@@ -14,14 +14,14 @@ thiserror = "1.0"
 dotenv = "0.15"
 
 # axum
-tokio = { version = "1.36.0", features = ["macros", "rt-multi-thread", "fs", "signal"] }
+tokio = { version = "1.39.0", features = ["macros", "rt-multi-thread", "fs", "signal"] }
 tokio-util = { version = "0.7", features = ["io"] }
 axum = { version = "0.7", features = ["multipart"] }
 axum-extra = { version = "0.9", features = ["typed-header"] }
-bytes = "1.5"
+bytes = "1.6"
 
 # plugin analysis
-memflow = { version = "0.2", git = "https://github.com/memflow/memflow" }
+memflow = "0.2"
 
 # plugin storage
 serde = { version = "1.0", features = ["derive"] }
