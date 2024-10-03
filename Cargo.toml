@@ -21,14 +21,14 @@ thiserror = "1.0"
 dotenv = "0.15"
 
 # axum
-tokio = { version = "1.39.0", features = ["macros", "rt-multi-thread", "fs", "signal"] }
+tokio = { version = "1.40", features = ["macros", "rt-multi-thread", "fs", "signal"] }
 tokio-util = { version = "0.7", features = ["io"] }
 axum = { version = "0.7", features = ["multipart"] }
 axum-extra = { version = "0.9", features = ["typed-header"] }
-bytes = "1.6"
+bytes = "1.7"
 
 # plugin analysis
-memflow = "0.2"
+memflow = ">=0.2.3"
 
 # plugin storage
 serde = { version = "1.0", features = ["derive"] }
@@ -46,4 +46,4 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 [dev-dependencies]
 # unit testing
 tempfile = "3.10"
-tower = "0.4"
+tower = "0.5"
