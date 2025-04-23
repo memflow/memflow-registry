@@ -1,5 +1,4 @@
 .git
-memflow-registry-shared/assets
 target
 .env
 .pem
