@@ -1,4 +1,4 @@
-FROM rust:slim-buster as builder
+FROM rust:slim AS builder
 
 WORKDIR /usr/src/memflow-registry
 COPY . .
@@ -6,7 +6,7 @@ COPY . .
 WORKDIR /usr/src/memflow-registry
 RUN cargo install --path .
 
-FROM debian:buster-slim
+FROM debian:stable-slim
 COPY --from=builder /usr/local/cargo/bin/memflow-registry /usr/local/bin/memflow-registry
 
 ENV RUST_LOG=info

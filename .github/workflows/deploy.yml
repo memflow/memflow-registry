@@ -14,5 +14,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker login -u ko1n -p ${{ secrets.DOCKER_HUB_TOKEN }}
+      - run: docker pull rust:slim && docker pull debian:stable-slim
       - run: docker build -t ko1n/memflow-registry:latest .
       - run: docker push ko1n/memflow-registry:latest
