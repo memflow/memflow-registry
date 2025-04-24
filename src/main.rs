@@ -20,7 +20,7 @@ async fn main() {
     dotenv::dotenv().ok();
 
     // initialize logging
-    env_logger::init();
+    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
     match std::env::var("MEMFLOW_BEARER_TOKEN") {
         Ok(token) if token.is_empty() => {

@@ -28,7 +28,7 @@ use super::{
 pub fn app(storage: Storage, auth_token: AuthorizationToken) -> Router {
     let authed_routes = Router::new()
         .route("/files", post(upload_file))
-        .route("/files/:digest", delete(delete_file_by_digest))
+        .route("/files/{digest}", delete(delete_file_by_digest))
         .layer(DefaultBodyLimit::max(20 * 1024 * 1024)) // 20 mb
         .route_layer(middleware::from_fn_with_state(
             auth_token.clone(),
@@ -38,9 +38,9 @@ pub fn app(storage: Storage, auth_token: AuthorizationToken) -> Router {
 
     let public_routes = Router::new()
         .route("/plugins", get(get_plugins))
-        .route("/plugins/:plugin_name", get(find_plugin_variants))
-        .route("/files/:digest", get(download_file_by_digest))
-        .route("/files/:digest/metadata", get(get_file_metadata_by_digest))
+        .route("/plugins/{plugin_name}", get(find_plugin_variants))
+        .route("/files/{digest}", get(download_file_by_digest))
+        .route("/files/{digest}/metadata", get(get_file_metadata_by_digest))
         .with_state(storage);
 
     Router::new().merge(public_routes).merge(authed_routes)
