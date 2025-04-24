@@ -29,6 +29,30 @@ pub enum Error {
     Http(String),
     #[error("Signature error: {0}")]
     Signature(String),
+
+    #[error("{0} {1}")]
+    Wrapped(String, Box<Error>),
+}
+
+impl Error {
+    #[inline]
+    pub fn context(self, context: &str) -> Self {
+        Self::Wrapped(context.to_string(), Box::new(self))
+    }
+}
+
+pub trait ResultExt<T> {
+    fn context(self, context: &str) -> Result<T>;
+}
+
+impl<T, E> ResultExt<T> for std::result::Result<T, E>
+where
+    E: Into<Error>,
+{
+    #[inline]
+    fn context(self, context: &str) -> Result<T> {
+        self.map_err(|e| e.into().context(context))
+    }
 }
 
 impl From<&str> for Error {
@@ -69,6 +93,12 @@ impl From<k256::ecdsa::Error> for Error {
 
 impl From<std::num::ParseIntError> for Error {
     fn from(err: std::num::ParseIntError) -> Self {
+        Error::Parse(err.to_string())
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(err: serde_json::Error) -> Self {
         Error::Parse(err.to_string())
     }
 }

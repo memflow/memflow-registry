@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 
+use crate::error::ResultExt;
 use crate::{
     error::{Error, Result},
     pki::SignatureVerifier,
@@ -52,14 +53,21 @@ impl Storage {
         // TODO: create path if not exists
         let mut database = PluginDatabase::new();
 
-        let paths = std::fs::read_dir(&root)?;
+        let paths = std::fs::read_dir(&root).context(&format!(
+            "Unable to read database directory '{:?}'",
+            root.as_ref()
+        ))?;
         for path in paths.filter_map(|p| p.ok()) {
             if let Some(extension) = path.path().extension() {
                 if extension.to_str().unwrap_or_default() == "meta" {
-                    let metadata: PluginMetadata =
-                        serde_json::from_str(&std::fs::read_to_string(path.path())?)
-                            .map_err(|e| Error::Parse(e.to_string()))?;
-                    database.insert_all(&metadata)?;
+                    let contents = std::fs::read_to_string(path.path())
+                        .context(&format!("Unable to read {:?}", path.path()))?;
+                    let metadata: PluginMetadata = serde_json::from_str(&contents).context(
+                        &format!("Unable to deserialize metadata file {:?}", path.path()),
+                    )?;
+                    database
+                        .insert_all(&metadata)
+                        .context("Unable to add plugin to database")?;
                 }
             }
         }
