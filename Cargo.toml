@@ -25,7 +25,7 @@ tokio = { version = "1.40", features = ["macros", "rt-multi-thread", "fs", "sign
 tokio-util = { version = "0.7", features = ["io"] }
 axum = { version = "0.8", features = ["multipart"] }
 axum-extra = { version = "0.10", features = ["typed-header"] }
-bytes = "1.7"
+bytes = "1.11"
 
 # request / response
 serde = { version = "1.0", features = ["derive"] }
